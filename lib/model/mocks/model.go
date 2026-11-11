@@ -100,15 +100,15 @@ type Model struct {
 	connectedToReturnsOnCall map[int]struct {
 		result1 bool
 	}
-	ConnectionStatsStub        func() map[string]interface{}
+	ConnectionStatsStub        func() map[string]any
 	connectionStatsMutex       sync.RWMutex
 	connectionStatsArgsForCall []struct {
 	}
 	connectionStatsReturns struct {
-		result1 map[string]interface{}
+		result1 map[string]any
 	}
 	connectionStatsReturnsOnCall map[int]struct {
-		result1 map[string]interface{}
+		result1 map[string]any
 	}
 	CurrentFolderFileStub        func(string, string) (protocol.FileInfo, bool, error)
 	currentFolderFileMutex       sync.RWMutex
@@ -288,6 +288,19 @@ type Model struct {
 		result1 db.Counts
 		result2 error
 	}
+	IgnoredDeletionsStub        func(string) ([]model.IgnoredDeletion, error)
+	ignoredDeletionsMutex       sync.RWMutex
+	ignoredDeletionsArgsForCall []struct {
+		arg1 string
+	}
+	ignoredDeletionsReturns struct {
+		result1 []model.IgnoredDeletion
+		result2 error
+	}
+	ignoredDeletionsReturnsOnCall map[int]struct {
+		result1 []model.IgnoredDeletion
+		result2 error
+	}
 	IndexStub        func(protocol.Connection, *protocol.Index) error
 	indexMutex       sync.RWMutex
 	indexArgsForCall []struct {
@@ -461,6 +474,18 @@ type Model struct {
 		result1 map[string]db.PendingFolder
 		result2 error
 	}
+	PropagateIgnoredDeletionsStub        func(string, []string) error
+	propagateIgnoredDeletionsMutex       sync.RWMutex
+	propagateIgnoredDeletionsArgsForCall []struct {
+		arg1 string
+		arg2 []string
+	}
+	propagateIgnoredDeletionsReturns struct {
+		result1 error
+	}
+	propagateIgnoredDeletionsReturnsOnCall map[int]struct {
+		result1 error
+	}
 	ReceiveOnlySizeStub        func(string) (db.Counts, error)
 	receiveOnlySizeMutex       sync.RWMutex
 	receiveOnlySizeArgsForCall []struct {
@@ -562,6 +587,18 @@ type Model struct {
 	restoreFolderVersionsReturnsOnCall map[int]struct {
 		result1 map[string]error
 		result2 error
+	}
+	RestoreIgnoredDeletionsStub        func(string, []string) error
+	restoreIgnoredDeletionsMutex       sync.RWMutex
+	restoreIgnoredDeletionsArgsForCall []struct {
+		arg1 string
+		arg2 []string
+	}
+	restoreIgnoredDeletionsReturns struct {
+		result1 error
+	}
+	restoreIgnoredDeletionsReturnsOnCall map[int]struct {
+		result1 error
 	}
 	RevertStub        func(string)
 	revertMutex       sync.RWMutex
@@ -1092,7 +1129,7 @@ func (fake *Model) ConnectedToReturnsOnCall(i int, result1 bool) {
 	}{result1}
 }
 
-func (fake *Model) ConnectionStats() map[string]interface{} {
+func (fake *Model) ConnectionStats() map[string]any {
 	fake.connectionStatsMutex.Lock()
 	ret, specificReturn := fake.connectionStatsReturnsOnCall[len(fake.connectionStatsArgsForCall)]
 	fake.connectionStatsArgsForCall = append(fake.connectionStatsArgsForCall, struct {
@@ -1116,32 +1153,32 @@ func (fake *Model) ConnectionStatsCallCount() int {
 	return len(fake.connectionStatsArgsForCall)
 }
 
-func (fake *Model) ConnectionStatsCalls(stub func() map[string]interface{}) {
+func (fake *Model) ConnectionStatsCalls(stub func() map[string]any) {
 	fake.connectionStatsMutex.Lock()
 	defer fake.connectionStatsMutex.Unlock()
 	fake.ConnectionStatsStub = stub
 }
 
-func (fake *Model) ConnectionStatsReturns(result1 map[string]interface{}) {
+func (fake *Model) ConnectionStatsReturns(result1 map[string]any) {
 	fake.connectionStatsMutex.Lock()
 	defer fake.connectionStatsMutex.Unlock()
 	fake.ConnectionStatsStub = nil
 	fake.connectionStatsReturns = struct {
-		result1 map[string]interface{}
+		result1 map[string]any
 	}{result1}
 }
 
-func (fake *Model) ConnectionStatsReturnsOnCall(i int, result1 map[string]interface{}) {
+func (fake *Model) ConnectionStatsReturnsOnCall(i int, result1 map[string]any) {
 	fake.connectionStatsMutex.Lock()
 	defer fake.connectionStatsMutex.Unlock()
 	fake.ConnectionStatsStub = nil
 	if fake.connectionStatsReturnsOnCall == nil {
 		fake.connectionStatsReturnsOnCall = make(map[int]struct {
-			result1 map[string]interface{}
+			result1 map[string]any
 		})
 	}
 	fake.connectionStatsReturnsOnCall[i] = struct {
-		result1 map[string]interface{}
+		result1 map[string]any
 	}{result1}
 }
 
@@ -1998,6 +2035,70 @@ func (fake *Model) GlobalSizeReturnsOnCall(i int, result1 db.Counts, result2 err
 	}{result1, result2}
 }
 
+func (fake *Model) IgnoredDeletions(arg1 string) ([]model.IgnoredDeletion, error) {
+	fake.ignoredDeletionsMutex.Lock()
+	ret, specificReturn := fake.ignoredDeletionsReturnsOnCall[len(fake.ignoredDeletionsArgsForCall)]
+	fake.ignoredDeletionsArgsForCall = append(fake.ignoredDeletionsArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.IgnoredDeletionsStub
+	fakeReturns := fake.ignoredDeletionsReturns
+	fake.recordInvocation("IgnoredDeletions", []interface{}{arg1})
+	fake.ignoredDeletionsMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fakeReturns.result1, fakeReturns.result2
+}
+
+func (fake *Model) IgnoredDeletionsCallCount() int {
+	fake.ignoredDeletionsMutex.RLock()
+	defer fake.ignoredDeletionsMutex.RUnlock()
+	return len(fake.ignoredDeletionsArgsForCall)
+}
+
+func (fake *Model) IgnoredDeletionsCalls(stub func(string) ([]model.IgnoredDeletion, error)) {
+	fake.ignoredDeletionsMutex.Lock()
+	defer fake.ignoredDeletionsMutex.Unlock()
+	fake.IgnoredDeletionsStub = stub
+}
+
+func (fake *Model) IgnoredDeletionsArgsForCall(i int) string {
+	fake.ignoredDeletionsMutex.RLock()
+	defer fake.ignoredDeletionsMutex.RUnlock()
+	argsForCall := fake.ignoredDeletionsArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *Model) IgnoredDeletionsReturns(result1 []model.IgnoredDeletion, result2 error) {
+	fake.ignoredDeletionsMutex.Lock()
+	defer fake.ignoredDeletionsMutex.Unlock()
+	fake.IgnoredDeletionsStub = nil
+	fake.ignoredDeletionsReturns = struct {
+		result1 []model.IgnoredDeletion
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *Model) IgnoredDeletionsReturnsOnCall(i int, result1 []model.IgnoredDeletion, result2 error) {
+	fake.ignoredDeletionsMutex.Lock()
+	defer fake.ignoredDeletionsMutex.Unlock()
+	fake.IgnoredDeletionsStub = nil
+	if fake.ignoredDeletionsReturnsOnCall == nil {
+		fake.ignoredDeletionsReturnsOnCall = make(map[int]struct {
+			result1 []model.IgnoredDeletion
+			result2 error
+		})
+	}
+	fake.ignoredDeletionsReturnsOnCall[i] = struct {
+		result1 []model.IgnoredDeletion
+		result2 error
+	}{result1, result2}
+}
+
 func (fake *Model) Index(arg1 protocol.Connection, arg2 *protocol.Index) error {
 	fake.indexMutex.Lock()
 	ret, specificReturn := fake.indexReturnsOnCall[len(fake.indexArgsForCall)]
@@ -2803,6 +2904,73 @@ func (fake *Model) PendingFoldersReturnsOnCall(i int, result1 map[string]db.Pend
 	}{result1, result2}
 }
 
+func (fake *Model) PropagateIgnoredDeletions(arg1 string, arg2 []string) error {
+	var arg2Copy []string
+	if arg2 != nil {
+		arg2Copy = make([]string, len(arg2))
+		copy(arg2Copy, arg2)
+	}
+	fake.propagateIgnoredDeletionsMutex.Lock()
+	ret, specificReturn := fake.propagateIgnoredDeletionsReturnsOnCall[len(fake.propagateIgnoredDeletionsArgsForCall)]
+	fake.propagateIgnoredDeletionsArgsForCall = append(fake.propagateIgnoredDeletionsArgsForCall, struct {
+		arg1 string
+		arg2 []string
+	}{arg1, arg2Copy})
+	stub := fake.PropagateIgnoredDeletionsStub
+	fakeReturns := fake.propagateIgnoredDeletionsReturns
+	fake.recordInvocation("PropagateIgnoredDeletions", []interface{}{arg1, arg2Copy})
+	fake.propagateIgnoredDeletionsMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *Model) PropagateIgnoredDeletionsCallCount() int {
+	fake.propagateIgnoredDeletionsMutex.RLock()
+	defer fake.propagateIgnoredDeletionsMutex.RUnlock()
+	return len(fake.propagateIgnoredDeletionsArgsForCall)
+}
+
+func (fake *Model) PropagateIgnoredDeletionsCalls(stub func(string, []string) error) {
+	fake.propagateIgnoredDeletionsMutex.Lock()
+	defer fake.propagateIgnoredDeletionsMutex.Unlock()
+	fake.PropagateIgnoredDeletionsStub = stub
+}
+
+func (fake *Model) PropagateIgnoredDeletionsArgsForCall(i int) (string, []string) {
+	fake.propagateIgnoredDeletionsMutex.RLock()
+	defer fake.propagateIgnoredDeletionsMutex.RUnlock()
+	argsForCall := fake.propagateIgnoredDeletionsArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *Model) PropagateIgnoredDeletionsReturns(result1 error) {
+	fake.propagateIgnoredDeletionsMutex.Lock()
+	defer fake.propagateIgnoredDeletionsMutex.Unlock()
+	fake.PropagateIgnoredDeletionsStub = nil
+	fake.propagateIgnoredDeletionsReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *Model) PropagateIgnoredDeletionsReturnsOnCall(i int, result1 error) {
+	fake.propagateIgnoredDeletionsMutex.Lock()
+	defer fake.propagateIgnoredDeletionsMutex.Unlock()
+	fake.PropagateIgnoredDeletionsStub = nil
+	if fake.propagateIgnoredDeletionsReturnsOnCall == nil {
+		fake.propagateIgnoredDeletionsReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.propagateIgnoredDeletionsReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
 func (fake *Model) ReceiveOnlySize(arg1 string) (db.Counts, error) {
 	fake.receiveOnlySizeMutex.Lock()
 	ret, specificReturn := fake.receiveOnlySizeReturnsOnCall[len(fake.receiveOnlySizeArgsForCall)]
@@ -3264,6 +3432,73 @@ func (fake *Model) RestoreFolderVersionsReturnsOnCall(i int, result1 map[string]
 		result1 map[string]error
 		result2 error
 	}{result1, result2}
+}
+
+func (fake *Model) RestoreIgnoredDeletions(arg1 string, arg2 []string) error {
+	var arg2Copy []string
+	if arg2 != nil {
+		arg2Copy = make([]string, len(arg2))
+		copy(arg2Copy, arg2)
+	}
+	fake.restoreIgnoredDeletionsMutex.Lock()
+	ret, specificReturn := fake.restoreIgnoredDeletionsReturnsOnCall[len(fake.restoreIgnoredDeletionsArgsForCall)]
+	fake.restoreIgnoredDeletionsArgsForCall = append(fake.restoreIgnoredDeletionsArgsForCall, struct {
+		arg1 string
+		arg2 []string
+	}{arg1, arg2Copy})
+	stub := fake.RestoreIgnoredDeletionsStub
+	fakeReturns := fake.restoreIgnoredDeletionsReturns
+	fake.recordInvocation("RestoreIgnoredDeletions", []interface{}{arg1, arg2Copy})
+	fake.restoreIgnoredDeletionsMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *Model) RestoreIgnoredDeletionsCallCount() int {
+	fake.restoreIgnoredDeletionsMutex.RLock()
+	defer fake.restoreIgnoredDeletionsMutex.RUnlock()
+	return len(fake.restoreIgnoredDeletionsArgsForCall)
+}
+
+func (fake *Model) RestoreIgnoredDeletionsCalls(stub func(string, []string) error) {
+	fake.restoreIgnoredDeletionsMutex.Lock()
+	defer fake.restoreIgnoredDeletionsMutex.Unlock()
+	fake.RestoreIgnoredDeletionsStub = stub
+}
+
+func (fake *Model) RestoreIgnoredDeletionsArgsForCall(i int) (string, []string) {
+	fake.restoreIgnoredDeletionsMutex.RLock()
+	defer fake.restoreIgnoredDeletionsMutex.RUnlock()
+	argsForCall := fake.restoreIgnoredDeletionsArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2
+}
+
+func (fake *Model) RestoreIgnoredDeletionsReturns(result1 error) {
+	fake.restoreIgnoredDeletionsMutex.Lock()
+	defer fake.restoreIgnoredDeletionsMutex.Unlock()
+	fake.RestoreIgnoredDeletionsStub = nil
+	fake.restoreIgnoredDeletionsReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *Model) RestoreIgnoredDeletionsReturnsOnCall(i int, result1 error) {
+	fake.restoreIgnoredDeletionsMutex.Lock()
+	defer fake.restoreIgnoredDeletionsMutex.Unlock()
+	fake.RestoreIgnoredDeletionsStub = nil
+	if fake.restoreIgnoredDeletionsReturnsOnCall == nil {
+		fake.restoreIgnoredDeletionsReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.restoreIgnoredDeletionsReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
 }
 
 func (fake *Model) Revert(arg1 string) {

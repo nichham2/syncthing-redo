@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<!--
+  Copyright (C) 2026 The Syncthing Authors.
+
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this file,
+  You can obtain one at https://mozilla.org/MPL/2.0/.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <title>Photo Sync</title>
+  <link rel="icon" href="../assets/img/favicon-default.png">
+  <link rel="stylesheet" href="mobile.css">
+  <script src="../meta.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="topbar-title" id="view-title">Sync</h1>
+    <span class="conn-pill" id="conn-pill" role="status" aria-live="polite">
+      <span class="dot"></span><span class="conn-label">Connecting…</span>
+    </span>
+  </header>
+
+  <main id="main">
+    <!-- Sync overview -->
+    <section class="view" id="view-sync" aria-labelledby="tab-sync">
+      <div class="card hero" id="hero">
+        <div class="ring" id="ring" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="ring-track" cx="60" cy="60" r="52"></circle>
+            <circle class="ring-value" id="ring-value" cx="60" cy="60" r="52"></circle>
+          </svg>
+          <div class="ring-center">
+            <span class="ring-pct" id="ring-pct">–</span>
+            <span class="ring-sub">in sync</span>
+          </div>
+        </div>
+        <div class="hero-text">
+          <p class="hero-status" id="hero-status">Loading…</p>
+          <p class="hero-detail" id="hero-detail"></p>
+        </div>
+        <dl class="stats">
+          <div><dt>Last sync</dt><dd id="stat-last">–</dd></div>
+          <div><dt>On this phone</dt><dd id="stat-local">–</dd></div>
+          <div><dt>Kept elsewhere</dt><dd id="stat-ignored">–</dd></div>
+        </dl>
+        <button class="btn btn-primary btn-block" id="btn-sync-now" type="button">Sync now</button>
+      </div>
+
+      <h2 class="section-title">Folders</h2>
+      <ul class="list" id="folder-list"></ul>
+    </section>
+
+    <!-- Devices -->
+    <section class="view" id="view-devices" hidden aria-labelledby="tab-devices">
+      <ul class="list" id="device-list"></ul>
+
+      <h2 class="section-title">This device</h2>
+      <div class="card pair">
+        <img class="qr" id="my-qr" alt="QR code of this device's ID" width="148" height="148">
+        <div>
+          <p class="muted small">Scan this on your other phone, or copy the ID.</p>
+          <code class="device-id" id="my-id">–</code>
+          <button class="btn btn-secondary" id="btn-copy-id" type="button">Copy ID</button>
+        </div>
+      </div>
+
+      <h2 class="section-title">Add a device</h2>
+      <form class="card form" id="add-device-form" autocomplete="off">
+        <label class="field">
+          <span>Device ID</span>
+          <input name="deviceID" required inputmode="text" autocapitalize="characters" spellcheck="false"
+                 placeholder="XXXXXXX-XXXXXXX-…" pattern="[A-Za-z0-9\- ]{50,}">
+        </label>
+        <label class="field">
+          <span>Name</span>
+          <input name="name" placeholder="e.g. Pixel 9" maxlength="64">
+        </label>
+        <button class="btn btn-primary btn-block" type="submit">Add and share photos</button>
+      </form>
+    </section>
+
+    <!-- Ignored (deleted here, kept elsewhere) -->
+    <section class="view" id="view-ignored" hidden aria-labelledby="tab-ignored">
+      <p class="explainer">
+        Photos you delete on this phone stay on your other devices and are
+        not downloaded here again. Restore them to bring them back, or
+        delete them everywhere.
+      </p>
+      <div class="toolbar">
+        <label class="search">
+          <span class="visually-hidden">Search ignored files</span>
+          <input type="search" id="ignored-search" placeholder="Search">
+        </label>
+        <select id="ignored-folder" aria-label="Folder"></select>
+      </div>
+      <div class="select-all" id="select-all-row" hidden>
+        <label class="check"><input type="checkbox" id="select-all"><span>Select all</span></label>
+        <span class="muted small" id="ignored-count"></span>
+      </div>
+      <ul class="list" id="ignored-list"></ul>
+      <div class="empty" id="ignored-empty" hidden>
+        <div class="empty-art" aria-hidden="true"></div>
+        <p class="empty-title">Nothing here</p>
+        <p class="muted">When you delete a synced photo on this phone, it shows up here instead of disappearing from your other devices.</p>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section class="view" id="view-settings" hidden aria-labelledby="tab-settings">
+      <h2 class="section-title">Deleting photos</h2>
+      <ul class="list" id="settings-folders"></ul>
+
+      <h2 class="section-title">Syncing</h2>
+      <ul class="list">
+        <li class="row">
+          <div class="row-main">
+            <span class="row-title">Pause all syncing</span>
+            <span class="row-sub">Stops connections to every device</span>
+          </div>
+          <label class="switch"><input type="checkbox" id="toggle-pause-all"><span aria-hidden="true"></span>
+            <span class="visually-hidden">Pause all syncing</span></label>
+        </li>
+      </ul>
+
+      <h2 class="section-title">Advanced</h2>
+      <ul class="list">
+        <li class="row"><a class="row-link" href="../">Open the full Syncthing interface</a></li>
+      </ul>
+      <p class="muted small center" id="version"></p>
+    </section>
+  </main>
+
+  <!-- Sticky selection actions for the ignored view -->
+  <div class="action-bar" id="action-bar" hidden>
+    <span id="action-count">0 selected</span>
+    <div class="action-buttons">
+      <button class="btn btn-danger-ghost" id="btn-delete-everywhere" type="button">Delete everywhere</button>
+      <button class="btn btn-primary" id="btn-restore" type="button">Restore</button>
+    </div>
+  </div>
+
+  <nav class="tabbar" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" id="tab-sync" data-view="sync" aria-selected="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6"/><path d="M18 3v4h-4M6 21v-4h4"/></svg>
+      <span>Sync</span>
+    </button>
+    <button class="tab" role="tab" id="tab-devices" data-view="devices" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="8" height="15" rx="2"/><rect x="13" y="6" width="8" height="13" rx="2"/></svg>
+      <span>Devices</span>
+    </button>
+    <button class="tab" role="tab" id="tab-ignored" data-view="ignored" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>
+      <span>Ignored</span>
+      <span class="badge" id="ignored-badge" hidden></span>
+    </button>
+    <button class="tab" role="tab" id="tab-settings" data-view="settings" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog class="sheet" id="confirm-dialog">
+    <form method="dialog">
+      <h2 id="confirm-title">Delete everywhere?</h2>
+      <p id="confirm-body" class="muted"></p>
+      <div class="sheet-actions">
+        <button class="btn btn-secondary" value="cancel">Cancel</button>
+        <button class="btn btn-danger" value="ok" id="confirm-ok">Delete</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="mobile.js"></script>
+</body>
+</html>

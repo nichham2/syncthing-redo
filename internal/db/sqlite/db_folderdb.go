@@ -406,6 +406,36 @@ func (s *DB) PutMtime(folder, name string, ondisk, virtual time.Time) error {
 	return fdb.PutMtime(name, ondisk, virtual)
 }
 
+func (s *DB) PutIgnoredDeletions(folder string, items []db.IgnoredDeletion) error {
+	fdb, err := s.getFolderDB(folder, true)
+	if err != nil {
+		return err
+	}
+	return fdb.PutIgnoredDeletions(items)
+}
+
+func (s *DB) DeleteIgnoredDeletions(folder string, names []string) error {
+	fdb, err := s.getFolderDB(folder, false)
+	if errors.Is(err, errNoSuchFolder) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return fdb.DeleteIgnoredDeletions(names)
+}
+
+func (s *DB) AllIgnoredDeletions(folder string) (iter.Seq[db.IgnoredDeletion], func() error) {
+	fdb, err := s.getFolderDB(folder, false)
+	if errors.Is(err, errNoSuchFolder) {
+		return func(func(db.IgnoredDeletion) bool) {}, func() error { return nil }
+	}
+	if err != nil {
+		return func(func(db.IgnoredDeletion) bool) {}, func() error { return err }
+	}
+	return fdb.AllIgnoredDeletions()
+}
+
 func (s *DB) DropDevice(device protocol.DeviceID) error {
 	return s.forEachFolder(func(fdb *folderDB) error {
 		return fdb.DropDevice(device)

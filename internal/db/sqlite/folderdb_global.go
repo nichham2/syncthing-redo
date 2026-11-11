@@ -143,7 +143,7 @@ func (s *folderDB) neededGlobalFilesLocal(selectOpts string, limit, offset int) 
 		INNER JOIN files g on fi.sequence = g.sequence
 		LEFT JOIN blocklists bl ON bl.blocklist_hash = g.blocklist_hash
 		INNER JOIN file_names n ON g.name_idx = n.idx
-		WHERE g.local_flags & {{.FlagLocalIgnored}} = 0 AND g.local_flags & {{.FlagLocalNeeded}} != 0
+		WHERE g.local_flags & {{.LocalHiddenFlags}} = 0 AND g.local_flags & {{.FlagLocalNeeded}} != 0
 	`+selectOpts).Queryx(limit, offset))
 	return itererr.Map(it, errFn, indirectFI.FileInfo)
 }

@@ -24,7 +24,7 @@ func (s *folderDB) CountLocal(device protocol.DeviceID) (db.Counts, error) {
 	if err := s.stmt(`
 		SELECT s.type, s.count, s.size, s.local_flags, s.deleted FROM counts s
 		INNER JOIN devices d ON d.idx = s.device_idx
-		WHERE d.device_id = ? AND s.local_flags & {{.FlagLocalIgnored}} = 0
+		WHERE d.device_id = ? AND s.local_flags & {{.LocalHiddenFlags}} = 0
 	`).Select(&res, device.String()); err != nil {
 		return db.Counts{}, wrap(err)
 	}

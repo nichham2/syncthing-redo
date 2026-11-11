@@ -106,7 +106,34 @@ type DB interface {
 	GetMtime(folder, name string) (ondisk, virtual time.Time)
 	PutMtime(folder, name string, ondisk, virtual time.Time) error
 
+	// Ignored deletions: the ledger of items that were deleted on this
+	// device in a folder with non-destructive deletes enabled. Items in the
+	// ledger are kept on other devices and are not pulled back here.
+	PutIgnoredDeletions(folder string, items []IgnoredDeletion) error
+	DeleteIgnoredDeletions(folder string, names []string) error
+	AllIgnoredDeletions(folder string) (iter.Seq[IgnoredDeletion], func() error)
+
 	KV
+}
+
+// IgnoredDeletion is an entry in the non-destructive deletion ledger.
+type IgnoredDeletion struct {
+	Name          string                `json:"name"`
+	Type          protocol.FileInfoType `json:"type"`
+	Size          int64                 `json:"size"`
+	ModNanos      int64                 `json:"-"`
+	BlocklistHash []byte                `json:"blocklistHash,omitempty"`
+	IgnoredNanos  int64                 `json:"-"`
+}
+
+// ModTime is the modification time of the item when it was deleted.
+func (d IgnoredDeletion) ModTime() time.Time {
+	return time.Unix(0, d.ModNanos)
+}
+
+// IgnoredAt is the time the deletion was recorded.
+func (d IgnoredDeletion) IgnoredAt() time.Time {
+	return time.Unix(0, d.IgnoredNanos)
 }
 
 // Generic KV store

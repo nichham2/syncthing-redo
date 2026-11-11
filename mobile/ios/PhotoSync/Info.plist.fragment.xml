@@ -1,0 +1,27 @@
+<!-- Merge into the app target's Info.plist -->
+<key>NSPhotoLibraryUsageDescription</key>
+<string>Photo Sync copies your photos to your other devices.</string>
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>Photo Sync saves photos taken on your other devices to your library.</string>
+<key>NSLocalNetworkUsageDescription</key>
+<string>Photo Sync connects directly to your other devices on this network.</string>
+<!-- Local discovery uses UDP broadcast/multicast on port 21027, which on
+     iOS needs the com.apple.developer.networking.multicast entitlement
+     (requested from Apple). Without it, peers still find each other via
+     global discovery and relays. -->
+<key>UIBackgroundModes</key>
+<array>
+    <string>fetch</string>
+    <string>processing</string>
+</array>
+<key>BGTaskSchedulerPermittedIdentifiers</key>
+<array>
+    <string>net.syncthing.photosync.refresh</string>
+    <string>net.syncthing.photosync.processing</string>
+</array>
+<!-- The loopback dashboard is plain HTTP. -->
+<key>NSAppTransportSecurity</key>
+<dict>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+</dict>

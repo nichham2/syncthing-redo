@@ -65,6 +65,10 @@ type service interface {
 	ScheduleForceRescan(path string)
 	GetStatistics() (stats.FolderStatistics, error)
 
+	IgnoredDeletions() ([]IgnoredDeletion, error)
+	RestoreIgnoredDeletions(names []string) error
+	PropagateIgnoredDeletions(names []string) error
+
 	getState() (folderState, time.Time, error)
 }
 
@@ -95,6 +99,10 @@ type Model interface {
 
 	GetFolderVersions(folder string) (map[string][]versioner.FileVersion, error)
 	RestoreFolderVersions(folder string, versions map[string]time.Time) (map[string]error, error)
+
+	IgnoredDeletions(folder string) ([]IgnoredDeletion, error)
+	RestoreIgnoredDeletions(folder string, names []string) error
+	PropagateIgnoredDeletions(folder string, names []string) error
 
 	LocalFiles(folder string, device protocol.DeviceID) (iter.Seq[protocol.FileInfo], func() error)
 	LocalFilesSequenced(folder string, device protocol.DeviceID, startSet int64) (iter.Seq[protocol.FileInfo], func() error)
