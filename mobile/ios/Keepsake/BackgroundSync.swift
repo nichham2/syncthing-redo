@@ -18,8 +18,8 @@ import BackgroundTasks
 import UIKit
 
 enum BackgroundSync {
-    static let refreshID = "net.syncthing.photosync.refresh"
-    static let processingID = "net.syncthing.photosync.processing"
+    static let refreshID = (Bundle.main.bundleIdentifier ?? "app.keepsake.photos") + ".refresh"
+    static let processingID = (Bundle.main.bundleIdentifier ?? "app.keepsake.photos") + ".processing"
 
     /// Call from application(_:didFinishLaunchingWithOptions:).
     static func register() {
@@ -47,7 +47,7 @@ enum BackgroundSync {
     /// Keeps syncing for the short grace period after backgrounding.
     static func finishInBackground() {
         var id: UIBackgroundTaskIdentifier = .invalid
-        id = UIApplication.shared.beginBackgroundTask(withName: "syncthing-finish") {
+        id = UIApplication.shared.beginBackgroundTask(withName: "keepsake-finish") {
             SyncthingService.shared.stop()
             UIApplication.shared.endBackgroundTask(id)
         }

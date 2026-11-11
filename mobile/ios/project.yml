@@ -1,0 +1,46 @@
+# XcodeGen spec for the Keepsake iOS app: `brew install xcodegen && xcodegen`
+# in this directory creates Keepsake.xcodeproj. Run mobile/build-bridge.sh
+# ios first so Mobile.xcframework exists.
+name: Keepsake
+options:
+  bundleIdPrefix: app.keepsake
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    # Branding: change these to rename the app.
+    PRODUCT_NAME: Keepsake
+    PRODUCT_BUNDLE_IDENTIFIER: app.keepsake.photos
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: "" # set to your Apple team ID, or pick it in Xcode
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.9"
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+targets:
+  Keepsake:
+    type: application
+    platform: iOS
+    sources:
+      - path: Keepsake
+    dependencies:
+      - framework: Mobile.xcframework
+        embed: false # gomobile frameworks are static
+    info:
+      path: Keepsake/Info.plist
+      properties:
+        CFBundleDisplayName: Keepsake
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSPhotoLibraryUsageDescription: Keepsake copies your photos to your other devices.
+        NSPhotoLibraryAddUsageDescription: Keepsake saves photos taken on your other devices to your library.
+        NSLocalNetworkUsageDescription: Keepsake connects directly to your other devices on this network.
+        UIBackgroundModes: [fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers:
+          - $(PRODUCT_BUNDLE_IDENTIFIER).refresh
+          - $(PRODUCT_BUNDLE_IDENTIFIER).processing
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        # Local discovery uses UDP broadcast/multicast, which needs Apple's
+        # com.apple.developer.networking.multicast entitlement. Without it
+        # devices still find each other via global discovery and relays.

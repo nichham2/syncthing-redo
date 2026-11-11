@@ -148,7 +148,7 @@ actor PhotoLibraryBridge {
         let type: PHAssetResourceType = UTTypeIsMovie(url) ? .video : .photo
         let created = captureDate(of: url)
 
-        var placeholderID: String?
+        let placeholder = IdentifierBox()
         do {
             try await PHPhotoLibrary.shared().performChanges {
                 let req = PHAssetCreationRequest.forAsset()
@@ -156,12 +156,12 @@ actor PhotoLibraryBridge {
                 opts.originalFilename = url.lastPathComponent
                 req.addResource(with: type, fileURL: url, options: opts) // original bytes
                 req.creationDate = created
-                placeholderID = req.placeholderForCreatedAsset?.localIdentifier
+                placeholder.value = req.placeholderForCreatedAsset?.localIdentifier
             }
         } catch {
             return
         }
-        if let id = placeholderID {
+        if let id = placeholder.value {
             mapping.set(id, relPath: relPath)
             mapping.save()
         }
@@ -185,6 +185,11 @@ actor PhotoLibraryBridge {
     private func UTTypeIsMovie(_ url: URL) -> Bool {
         ["mov", "mp4", "m4v", "3gp"].contains(url.pathExtension.lowercased())
     }
+}
+
+/// Carries the new asset's identifier out of the change block.
+private final class IdentifierBox: @unchecked Sendable {
+    var value: String?
 }
 
 /// Persistent localIdentifier <-> staging relative path mapping.

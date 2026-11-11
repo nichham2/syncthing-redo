@@ -9,7 +9,7 @@
 // and Doze may defer it further. Each run is a bounded window: start the
 // node, sync until settled or the budget is spent, stop the node.
 
-package net.syncthing.photosync
+package app.keepsake
 
 import android.content.Context
 import androidx.work.Constraints
@@ -29,7 +29,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         try {
             SyncthingNode.init(applicationContext)
             // Workers get ~10 minutes; leave headroom for a clean stop.
-            SyncthingNode.runBackgroundSync(maxSeconds = 8 * 60)
+            SyncthingNode.runBackgroundSync(maxSeconds = 8L * 60)
             Result.success()
         } catch (e: Exception) {
             Result.retry()
@@ -37,7 +37,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     }
 
     companion object {
-        private const val NAME = "photo-sync"
+        private const val NAME = "keepsake-sync"
 
         fun schedule(context: Context, wifiOnly: Boolean, chargingOnly: Boolean) {
             val constraints = Constraints.Builder()

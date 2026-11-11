@@ -17,8 +17,9 @@
   --text: #14171f;
   --text-2: #5b6273;
   --border: #e2e5eb;
-  --accent: #0b6bcb;
-  --accent-soft: #e3effb;
+  --accent: #2457d6;
+  --accent-soft: #e6ecfb;
+  --brand-amber: #f5a524;
   --on-accent: #ffffff;
   --ok: #1a7f4b;
   --ok-soft: #e2f4ea;
@@ -49,8 +50,8 @@
     --text: #eceef2;
     --text-2: #9aa1b0;
     --border: #2a2f38;
-    --accent: #5aa7f2;
-    --accent-soft: #1b2b3d;
+    --accent: #7c9cf5;
+    --accent-soft: #1c2440;
     --on-accent: #0b1a2a;
     --ok: #4cc38a;
     --ok-soft: #173126;
@@ -97,7 +98,8 @@ button, input, select { font: inherit; color: inherit; }
   -webkit-backdrop-filter: saturate(1.4) blur(12px);
 }
 
-.topbar-title { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -.02em; }
+.topbar-title { margin: 0; display: flex; align-items: center; gap: 10px; font-size: 28px; font-weight: 700; letter-spacing: -.02em; }
+.brand-mark { width: 32px; height: 32px; border-radius: 8px; flex: none; }
 
 .conn-pill {
   display: inline-flex; align-items: center; gap: 8px;

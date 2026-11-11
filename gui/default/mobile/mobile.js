@@ -149,7 +149,7 @@
             get('stats/folder'),
             get('stats/device'),
             state.myID ? null : get('system/status').then(function (s) { state.myID = s.myID; }),
-            state.version ? null : get('system/version').then(function (v) { state.version = 'Syncthing ' + v.version; })
+            state.version ? null : get('system/version').then(function (v) { state.version = 'Keepsake · built on Syncthing ' + v.version; })
         ]).then(function (r) {
             state.config = r[0];
             state.connections = (r[1] && r[1].connections) || {};
@@ -439,7 +439,7 @@
         document.querySelectorAll('.tab').forEach(function (t) {
             t.setAttribute('aria-selected', String(t.dataset.view === view));
         });
-        $('view-title').textContent = { sync: 'Sync', devices: 'Devices', ignored: 'Ignored', settings: 'Settings' }[view];
+        $('view-title').textContent = { sync: 'Keepsake', devices: 'Devices', ignored: 'Ignored', settings: 'Settings' }[view];
         updateActionBar();
         window.scrollTo(0, 0);
     }

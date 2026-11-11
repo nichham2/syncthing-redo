@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- app_name is set from gradle.properties (keepsake.appName) -->
+    <string name="notification_channel">Photo syncing</string>
+    <string name="notification_syncing">Keeping your photos in sync</string>
+</resources>

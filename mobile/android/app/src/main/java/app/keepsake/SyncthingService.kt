@@ -9,7 +9,7 @@
 // Android 14+ requires the dataSync type; Android 15 caps dataSync
 // services at 6 hours per day and calls onTimeout when the cap is hit.
 
-package net.syncthing.photosync
+package app.keepsake
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -50,10 +50,10 @@ class SyncthingService : Service() {
 
     private fun notification(): Notification {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel("sync", "Photo sync", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel("sync", getString(R.string.notification_channel), NotificationManager.IMPORTANCE_LOW))
         return NotificationCompat.Builder(this, "sync")
-            .setContentTitle("Syncing photos")
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle(getString(R.string.notification_syncing))
+            .setSmallIcon(R.drawable.ic_stat_keepsake)
             .setOngoing(true)
             .build()
     }

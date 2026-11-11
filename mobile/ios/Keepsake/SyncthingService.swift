@@ -4,8 +4,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
 // You can obtain one at https://mozilla.org/MPL/2.0/.
 //
-// Owns the embedded Syncthing node (Syncthing.xcframework, built with
-// `gomobile bind -target=ios ./lib/mobile`) and connects it to the photo
+// Owns the embedded sync engine (Mobile.xcframework, built from ./lib/mobile
+// by mobile/build-bridge.sh) and connects it to the photo
 // library. Type and method names follow gomobile's generated Objective-C
 // headers (package "mobile" -> prefix "Mobile").
 
@@ -32,7 +32,7 @@ final class SyncthingService: NSObject, MobilePlatformProtocol {
     private override init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         homeDir = support.appendingPathComponent("Syncthing", isDirectory: true)
-        photoDir = support.appendingPathComponent("PhotoSync", isDirectory: true)
+        photoDir = support.appendingPathComponent("Keepsake", isDirectory: true)
         super.init()
         try? FileManager.default.createDirectory(at: photoDir, withIntermediateDirectories: true)
         var values = URLResourceValues()

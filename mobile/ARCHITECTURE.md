@@ -1,8 +1,13 @@
-# Cross-platform photo sync: architecture
+# Keepsake: architecture
 
-This document explains how the Syncthing core was adapted to mirror photos
-between an iPhone and an Android phone, with deletions that stay local
-("ignore tag" logic) and a mobile-first dashboard.
+Keepsake is a fork of Syncthing that mirrors photos between an iPhone, an
+Android phone and an always-on hub, with deletions that stay local ("ignore
+tag" logic) and a mobile-first dashboard. This document explains how the
+Syncthing core was adapted. Installation is covered in
+[`INSTALL.md`](INSTALL.md), naming and icons in [`branding/`](branding/).
+
+In the code, the sync engine is still called Syncthing (package names,
+config keys, REST paths). "Keepsake" is the product name shown to users.
 
 ```
  ┌──────────── iPhone ─────────────┐            ┌──────────── Android ────────────┐
@@ -144,11 +149,11 @@ nothing to pull and every connected peer is at 100% (held for 3 s, after a
 Build:
 
 ```sh
-gomobile bind -target=ios     -o Syncthing.xcframework ./lib/mobile
-gomobile bind -target=android -o syncthing.aar         ./lib/mobile
+mobile/build-bridge.sh ios       # -> mobile/ios/Mobile.xcframework
+mobile/build-bridge.sh android   # -> mobile/android/app/libs/keepsake-core.aar
 ```
 
-### iOS: `mobile/ios/PhotoSync`
+### iOS: `mobile/ios/Keepsake`
 
 Apple Photos is a database, not a folder, so the bridge keeps a **staging
 folder** in the app container plus a `localIdentifier ↔ path` mapping.
@@ -178,7 +183,7 @@ Trade-off: the staging folder doubles storage for synced photos on the
 iPhone. A later step can replace it with a virtual `fs.Filesystem` backed
 by PhotoKit, which Syncthing's filesystem abstraction allows.
 
-### Android: `mobile/android`
+### Android: `mobile/android/app/src/main/java/app/keepsake`
 
 * **Direct mode** (recommended, needs *All files access*, which Google Play
   allows for sync apps): Syncthing syncs `DCIM/Camera` in place. Files keep
@@ -199,11 +204,23 @@ by PhotoKit, which Syncthing's filesystem abstraction allows.
 Two phones only sync when **both are awake and online at the same time**.
 Background windows on iOS are short and up to the OS. Syncing works reliably
 while one app is in the foreground, or overnight when both phones are
-charging. For hands-off syncing, add an always-on Syncthing peer (a desktop,
-NAS or small VPS) sharing the same folder as a hub. Each phone then only
-needs to reach the hub. The non-destructive logic works the same with a hub.
+charging. That is why Keepsake's recommended setup has a third device: the
+**hub**, an always-on desktop, NAS or small VPS running `keepsake-hub` (the
+plain engine binary) and sharing the same `photos` folder. Each phone then
+only needs to reach the hub. The hub keeps `nonDestructiveDeletes` **off**:
+it never deletes anything itself, and since the phones announce their
+deletions as invalid rather than deleted, the hub keeps every photo. A
+photo deleted on the iPhone stays on the hub and on the Android phone.
+
+```
+   iPhone ◄──────► hub (computer/NAS, always on) ◄──────► Android
+      └───────────── direct, when both are awake ─────────────┘
+```
 
 ## 3. Mobile dashboard (`gui/default/mobile/`)
+
+Branded Keepsake (icon `keepsake-icon.svg`, accent blue `#2457D6`, amber
+ribbon `#F5A524`).
 
 A dependency-free page served by the core at `/mobile/`. The native apps
 load it in a WebView (`DashboardURL()` passes the API key in the URL

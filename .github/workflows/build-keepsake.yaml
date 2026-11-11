@@ -1,0 +1,112 @@
+name: Build Keepsake
+
+# Builds everything needed to install Keepsake on your devices and uploads
+# it as downloadable artifacts (Actions tab -> this workflow -> a run ->
+# "Artifacts"):
+#   keepsake-android-apk     installable debug APK for Android phones
+#   keepsake-hub-<platform>  the always-on computer / NAS ("hub")
+#   keepsake-ios-check       iOS simulator build that proves the app compiles
+#                            (installing on an iPhone needs your own signing,
+#                            see mobile/INSTALL.md)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "lib/**"
+      - "internal/**"
+      - "gui/default/mobile/**"
+      - "mobile/**"
+      - ".github/workflows/build-keepsake.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "lib/**"
+      - "internal/**"
+      - "gui/default/mobile/**"
+      - "mobile/**"
+      - ".github/workflows/build-keepsake.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  hub:
+    name: Hub (${{ matrix.goos }}-${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+        run: go run build.go -goos ${{ matrix.goos }} -goarch ${{ matrix.goarch }} -no-upgrade build syncthing
+      - name: Package
+        run: |
+          mkdir -p dist
+          bin=syncthing; [ "${{ matrix.goos }}" = windows ] && bin=syncthing.exe
+          out=keepsake-hub; [ "${{ matrix.goos }}" = windows ] && out=keepsake-hub.exe
+          cp "$bin" "dist/$out"
+          cp mobile/INSTALL.md LICENSE dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keepsake-hub-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Build sync engine (.aar)
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: mobile/build-bridge.sh android
+      - name: Build APK
+        working-directory: mobile/android
+        run: gradle --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keepsake-android-apk
+          path: mobile/android/app/build/outputs/apk/debug/*.apk
+
+  ios:
+    name: iOS (simulator compile check)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build sync engine (.xcframework)
+        run: mobile/build-bridge.sh ios
+      - name: Generate Xcode project
+        working-directory: mobile/ios
+        run: |
+          brew install xcodegen
+          xcodegen
+      - name: Build for simulator
+        working-directory: mobile/ios
+        run: |
+          xcodebuild -project Keepsake.xcodeproj -scheme Keepsake \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug CODE_SIGNING_ALLOWED=NO build

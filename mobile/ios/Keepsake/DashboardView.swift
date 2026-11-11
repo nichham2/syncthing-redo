@@ -19,7 +19,7 @@ struct DashboardView: View {
             if let url = service.dashboardURL {
                 WebView(url: url).ignoresSafeArea(edges: .bottom)
             } else {
-                ProgressView("Starting sync…")
+                ProgressView("Starting Keepsake…")
             }
         }
         .task {

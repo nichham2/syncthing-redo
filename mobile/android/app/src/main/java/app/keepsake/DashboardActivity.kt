@@ -7,7 +7,7 @@
 // Hosts the shared mobile dashboard (gui/default/mobile) in a WebView, so
 // Android and iOS present the same UI.
 
-package net.syncthing.photosync
+package app.keepsake
 
 import android.os.Bundle
 import android.webkit.WebView
@@ -33,7 +33,7 @@ class DashboardActivity : ComponentActivity() {
                 SyncthingNode.init(applicationContext)
                 SyncthingNode.start()
             }
-            SyncthingNode.dashboardUrl?.let(web::loadUrl)
+            SyncthingNode.dashboardUrl?.let { web.loadUrl(it) }
             SyncWorker.schedule(applicationContext, wifiOnly = true, chargingOnly = false)
         }
     }

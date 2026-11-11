@@ -19,7 +19,7 @@
 // byte-for-byte into an app-specific folder and new files from the other
 // device are inserted into MediaStore with their original bytes.
 
-package net.syncthing.photosync
+package app.keepsake
 
 import android.content.ContentUris
 import android.content.ContentValues
@@ -108,7 +108,7 @@ class MediaStoreBridge(private val context: Context, private val root: File) {
         else MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
-            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/PhotoSync")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/Keepsake")
             put(MediaStore.MediaColumns.DATE_MODIFIED, file.lastModified() / 1000)
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }

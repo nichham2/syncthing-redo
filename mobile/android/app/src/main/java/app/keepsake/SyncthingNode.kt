@@ -4,12 +4,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
 // You can obtain one at https://mozilla.org/MPL/2.0/.
 //
-// Process-wide holder for the embedded node (syncthing.aar, built with
+// Process-wide holder for the embedded node (keepsake-core.aar, built with
 // `gomobile bind -target=android ./lib/mobile`). gomobile maps package
 // "mobile" to the Java package "mobile": mobile.Mobile.newNode(),
 // mobile.Node, mobile.Platform.
 
-package net.syncthing.photosync
+package app.keepsake
 
 import android.content.Context
 import android.os.Environment
@@ -43,7 +43,7 @@ object SyncthingNode : mobile.Platform {
         if (MediaStoreBridge.hasAllFilesAccess()) {
             File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera")
         } else {
-            File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "PhotoSync")
+            File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "Keepsake")
         }
 
     @Synchronized
