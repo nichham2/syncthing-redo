@@ -18,8 +18,17 @@ import BackgroundTasks
 import UIKit
 
 enum BackgroundSync {
-    static let refreshID = (Bundle.main.bundleIdentifier ?? "app.keepsake.photos") + ".refresh"
-    static let processingID = (Bundle.main.bundleIdentifier ?? "app.keepsake.photos") + ".processing"
+    // Read the identifiers from Info.plist instead of deriving them from the
+    // bundle ID. Sideloading tools (AltStore, Sideloadly) often change the
+    // bundle ID when they re-sign the app, and registering an identifier that
+    // is not in BGTaskSchedulerPermittedIdentifiers crashes the app.
+    static let refreshID = permittedID(endingWith: ".refresh")
+    static let processingID = permittedID(endingWith: ".processing")
+
+    private static func permittedID(endingWith suffix: String) -> String {
+        let ids = Bundle.main.object(forInfoDictionaryKey: "BGTaskSchedulerPermittedIdentifiers") as? [String] ?? []
+        return ids.first { $0.hasSuffix(suffix) } ?? "app.keepsake.photos" + suffix
+    }
 
     /// Call from application(_:didFinishLaunchingWithOptions:).
     static func register() {

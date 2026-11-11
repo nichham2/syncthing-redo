@@ -38,9 +38,11 @@ targets:
         NSPhotoLibraryAddUsageDescription: Keepsake saves photos taken on your other devices to your library.
         NSLocalNetworkUsageDescription: Keepsake connects directly to your other devices on this network.
         UIBackgroundModes: [fetch, processing]
+        # Fixed strings, not derived from the bundle ID, so the app keeps
+        # working when a sideloading tool re-signs it under another ID.
         BGTaskSchedulerPermittedIdentifiers:
-          - $(PRODUCT_BUNDLE_IDENTIFIER).refresh
-          - $(PRODUCT_BUNDLE_IDENTIFIER).processing
+          - app.keepsake.photos.refresh
+          - app.keepsake.photos.processing
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         # Local discovery uses UDP broadcast/multicast, which needs Apple's

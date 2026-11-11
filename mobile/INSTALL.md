@@ -5,7 +5,7 @@ Keepsake runs on three devices:
 | Device | Role | What you install |
 |---|---|---|
 | **Computer or NAS** (Windows, Mac, Linux, Raspberry Pi) | The **hub**: always on, keeps a full copy of every photo, and passes photos between the phones when only one of them is awake | `keepsake-hub` program |
-| **iPhone** | Phone app | Keepsake iOS app, built and signed with Xcode on a Mac |
+| **iPhone** | Phone app | Keepsake iOS app, sideloaded from Windows/Linux, via TestFlight, or from Xcode on a Mac |
 | **Android phone** | Phone app | Keepsake APK |
 
 Why a hub? Phones only sync while both are awake and online, and iOS gives
@@ -26,11 +26,13 @@ Every push to the repository runs the **Build Keepsake** workflow
 3. Download:
    * `keepsake-android-apk` for the Android phone
    * `keepsake-hub-windows-amd64`, `-darwin-arm64` (Apple Silicon Mac), `-linux-amd64` or `-linux-arm64` (Raspberry Pi 4/5, most NAS boxes) for the hub
+   * `keepsake-ios-unsigned-ipa` for the iPhone (option A in step 3)
 
 You can also run the workflow by hand with **Run workflow**.
 
-The iPhone app can't be downloaded this way. Apple requires every app to be
-signed with your own Apple account, so you build it on a Mac (step 3).
+The iPhone download is unsigned. Apple requires every app to be signed with
+an Apple account before it runs, so step 3 covers signing it, with or
+without a Mac.
 
 ---
 
@@ -79,6 +81,64 @@ cd mobile/android && gradle assembleDebug   # APK in app/build/outputs/apk/debug
 
 ## 3. iPhone
 
+There are three ways to install the iPhone app. Only the last one needs a Mac.
+
+| Option | You need | How long an install lasts |
+|---|---|---|
+| **A. Sideload from Windows or Linux** (recommended to start) | A free Apple ID, a Windows PC (or Mac/Linux) and a USB cable | 7 days, then refresh (AltStore can do it automatically) |
+| **B. TestFlight, built in the cloud** | A paid Apple Developer account ($99/year) | 90 days per build; every push to `main` uploads a new one |
+| **C. Xcode on a Mac** | A Mac with Xcode | 7 days with a free Apple ID, 1 year with a paid one |
+
+Whichever you use, finish with the [first launch](#first-launch-on-the-iphone) steps.
+
+### A. Sideload from Windows or Linux (free Apple ID)
+
+GitHub builds the app on a Mac in the cloud, and a sideloading tool on your computer signs it with your Apple ID and copies it to the phone.
+
+1. Download the **`keepsake-ios-unsigned-ipa`** artifact (see [Getting the builds](#getting-the-builds)) and unzip it to get `Keepsake-unsigned.ipa`.
+2. Install a sideloading tool:
+   * **Sideloadly** (Windows, macOS): <https://sideloadly.io>. On Windows, also install **iTunes** and **iCloud** from Apple's website (not the Microsoft Store versions) so the PC can talk to the iPhone.
+   * **AltStore** (Windows, macOS): <https://altstore.io>. AltServer on your PC re-signs the app every few days over Wi-Fi, so it doesn't expire as long as the PC is on now and then.
+   * On Linux, use **AltServer-Linux** or **SideStore** (<https://sidestore.io>), which run without iTunes.
+3. Connect the iPhone by USB, unlock it and tap **Trust** on the phone.
+4. Drop `Keepsake-unsigned.ipa` into the tool, enter your Apple ID, and start the install.
+   * Use a spare Apple ID if you prefer. Apple only uses it to sign the app.
+   * If the tool reports that the bundle ID is taken, let it change it (Sideloadly: *Advanced options*, *Bundle ID*). Keepsake keeps working under any bundle ID.
+5. On the iPhone, turn on **Developer Mode** (*Settings*, *Privacy & Security*, *Developer Mode*; the phone restarts), then trust your Apple ID: *Settings*, *General*, *VPN & Device Management*, your Apple ID, **Trust**.
+
+Limits of a free Apple ID: the app stops opening after **7 days** until it is re-signed (open the tool and install again, or let AltStore refresh it). Your photos and settings stay. You can have at most three sideloaded apps at a time.
+
+### B. TestFlight, built in the cloud (paid developer account)
+
+GitHub signs the app with your developer account and uploads it to TestFlight. You install it with Apple's **TestFlight** app, like a normal App Store app. Everything is done in a web browser.
+
+One-time setup:
+
+1. Join the [Apple Developer Program](https://developer.apple.com/programs/) ($99/year). Note your **Team ID** (*Membership details* on developer.apple.com).
+2. Register the app ID: on developer.apple.com, open *Certificates, Identifiers & Profiles*, then *Identifiers*, and add an App ID with bundle ID `app.keepsake.photos`.
+   * If that ID is taken, pick your own (for example `com.yourname.keepsake`) and set it as the repository **variable** `IOS_BUNDLE_ID` (GitHub, *Settings*, *Secrets and variables*, *Actions*, *Variables*).
+3. In [App Store Connect](https://appstoreconnect.apple.com), go to *Apps* and add a **New App**: platform iOS, name Keepsake, and the bundle ID from step 2. You don't have to submit it to the App Store.
+4. In App Store Connect, go to *Users and Access*, then *Integrations*, then *App Store Connect API*. Create a **team key** with the **Admin** role and download the `.p8` file. Xcode needs Admin to create the signing certificate itself. Note the **Key ID** and **Issuer ID**.
+5. In the GitHub repository, go to *Settings*, *Secrets and variables*, *Actions*, and add these **secrets**:
+
+   | Secret | Value |
+   |---|---|
+   | `APPLE_TEAM_ID` | Your Team ID |
+   | `ASC_KEY_ID` | The Key ID |
+   | `ASC_ISSUER_ID` | The Issuer ID |
+   | `ASC_KEY_P8` | The whole contents of the `.p8` file, including the `BEGIN` and `END` lines |
+
+Then:
+
+1. Run **Build Keepsake** from the Actions tab with **testflight** ticked. After that, every push to `main` uploads a new build.
+2. After 5 to 15 minutes the build appears in App Store Connect under *TestFlight*. The first time, App Store Connect asks an export compliance question. Keepsake only uses standard encryption (TLS) for its connections; Apple's questionnaire explains which answer applies to that.
+3. Under *TestFlight*, *Internal Testing*, add yourself (and anyone else on your team) as a tester.
+4. On the iPhone, install **TestFlight** from the App Store, open the invite, and tap **Install**.
+
+TestFlight builds expire after 90 days. A new push to `main` replaces them.
+
+### C. Xcode on a Mac
+
 You need a **Mac** with **Xcode 16** or newer, [Homebrew](https://brew.sh) and Go (`brew install go`).
 
 1. Get the code: `git clone https://github.com/nichham2/syncthing-redo && cd syncthing-redo`
@@ -94,11 +154,14 @@ You need a **Mac** with **Xcode 16** or newer, [Homebrew](https://brew.sh) and G
 4. Connect the iPhone by USB and unlock it. Turn on **Developer Mode** (*Settings*, *Privacy & Security*, *Developer Mode*; the phone restarts).
 5. Pick the iPhone as the run destination in Xcode's toolbar and press **Run** (▶).
 6. With a free Apple ID, the first launch is blocked until you trust yourself as the developer: *Settings*, *General*, *VPN & Device Management*, your Apple ID, **Trust**.
-7. Open **Keepsake** and allow **Full Access** to Photos.
-   * Allow **Local Network** when asked, so Keepsake can reach your other devices directly on Wi-Fi.
-   * Keep **Background App Refresh** on for Keepsake (*Settings*, *General*, *Background App Refresh*).
 
-**Free Apple ID vs. paid developer account:** with a free Apple ID, the app stops opening after **7 days**. Plug the phone in and press Run again to renew it (your photos and settings stay). A paid Apple Developer Program membership ($99/year) makes the install last a year and lets you use TestFlight.
+With a free Apple ID the app stops opening after 7 days; press Run again to renew it.
+
+### First launch on the iPhone
+
+* Open **Keepsake** and allow **Full Access** to Photos.
+* Allow **Local Network** when asked, so Keepsake can reach your other devices directly on Wi-Fi.
+* Keep **Background App Refresh** on for Keepsake (*Settings*, *General*, *Background App Refresh*).
 
 ---
 
@@ -134,7 +197,7 @@ The first sync copies every photo. Do it on Wi-Fi with the phones plugged in and
 | Problem | What to check |
 |---|---|
 | Phone stays "Waiting for your devices" | Is the hub running? Is the hub's ID correct on the phone? Did you accept the phone on the hub? |
-| iPhone app won't open after a week | The free Apple ID 7-day limit; re-run from Xcode. |
+| iPhone app won't open after a week | The free Apple ID 7-day limit. Install it again with your sideloading tool (or let AltStore refresh it), or press Run again in Xcode. |
 | Android photos don't appear in Gallery | Grant *All files access*, or look in the `DCIM/Keepsake` album. |
 | Android syncs rarely | Set battery usage to *Unrestricted*; keep Wi-Fi on. |
 | Sync is slow on cellular | Pause syncing in Settings, or set Wi-Fi-only (default on Android). |

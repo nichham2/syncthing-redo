@@ -11,7 +11,7 @@ always-on hub (computer or NAS) in between. Deleting a photo on one phone remove
 * `ios/`: the iOS app. `project.yml` (XcodeGen) generates `Keepsake.xcodeproj`; Swift sources are in `ios/Keepsake`.
 * `android/`: the Android app (Gradle). Kotlin sources are in `android/app/src/main/java/app/keepsake`.
 * `../gui/default/mobile`: the dashboard UI both apps show, served by the core at `/mobile/`.
-* `../.github/workflows/build-keepsake.yaml`: CI that builds the hub binaries, the Android APK, and checks the iOS build.
+* `../.github/workflows/build-keepsake.yaml`: CI that builds the hub binaries, the Android APK, an unsigned iPhone IPA for sideloading, and (with Apple secrets) uploads a signed build to TestFlight.
 
 ## How the app works
 
