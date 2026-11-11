@@ -278,7 +278,8 @@ jobs:
 
   package-linux:
     name: Package for Linux (${{ matrix.group }})
-    runs-on: ubuntu-latest
+    # The MIPS64 cross compilers are packaged for this release.
+    runs-on: ubuntu-24.04
     needs:
       - facts
     strategy:
@@ -725,7 +726,8 @@ jobs:
 
   package-debian:
     name: Package for Debian
-    runs-on: ubuntu-latest
+    # setup-ruby has no Ruby 3.0 build for the newer ubuntu-latest image.
+    runs-on: ubuntu-24.04
     needs:
       - facts
     env:

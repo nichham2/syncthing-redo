@@ -17,6 +17,8 @@ settings:
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.9"
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    # The Go runtime's DNS resolver uses libresolv.
+    OTHER_LDFLAGS: "$(inherited) -lresolv"
 targets:
   Keepsake:
     type: application

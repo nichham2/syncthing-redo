@@ -8,6 +8,7 @@ package model
 
 import (
 	"context"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -186,10 +187,12 @@ func TestNonDestructiveDeleteNotPulledBack(t *testing.T) {
 func TestNonDestructiveDeleteRestore(t *testing.T) {
 	m, fc, tfs, _ := setupNonDestructive(t)
 
+	// Index names use native separators, as after protocol conversion.
+	a, b := filepath.Join("Album", "a.jpg"), filepath.Join("Album", "b.jpg")
 	must(t, tfs.MkdirAll("Album", 0o755))
 	fc.addFile("Album", 0o755, protocol.FileInfoTypeDirectory, nil)
-	syncFromRemote(t, m, fc, tfs, "Album/a.jpg", []byte("photo a"))
-	syncFromRemote(t, m, fc, tfs, "Album/b.jpg", []byte("photo b"))
+	syncFromRemote(t, m, fc, tfs, a, []byte("photo a"))
+	syncFromRemote(t, m, fc, tfs, b, []byte("photo b"))
 
 	// Delete the whole album.
 	must(t, tfs.RemoveAll("Album"))
@@ -203,16 +206,16 @@ func TestNonDestructiveDeleteRestore(t *testing.T) {
 
 	// Restoring one photo brings back the photo and its album, but not
 	// the other photo.
-	must(t, m.RestoreIgnoredDeletions("default", []string{"Album/a.jpg"}))
+	must(t, m.RestoreIgnoredDeletions("default", []string{a}))
 	waitFor(t, "restored photo to be pulled", func() bool {
-		return equalContents(tfs, "Album/a.jpg", []byte("photo a")) == nil
+		return equalContents(tfs, a, []byte("photo a")) == nil
 	})
-	if _, err := tfs.Lstat("Album/b.jpg"); !fs.IsNotExist(err) {
+	if _, err := tfs.Lstat(b); !fs.IsNotExist(err) {
 		t.Error("b.jpg should still be deleted here")
 	}
 	items, err = m.IgnoredDeletions("default")
 	must(t, err)
-	if len(items) != 1 || items[0].Name != "Album/b.jpg" {
+	if len(items) != 1 || items[0].Name != b {
 		t.Error("expected only b.jpg to remain in the ledger, got", items)
 	}
 }

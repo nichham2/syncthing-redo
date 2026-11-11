@@ -7,6 +7,7 @@
 package model
 
 import (
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -226,7 +227,8 @@ func (l *deletionLedger) Expand(names []string) ([]string, error) {
 		if _, ok := l.byName[key]; ok {
 			want[key] = struct{}{}
 		}
-		prefix := key + "/"
+		// Ledger keys use native separators (see ledgerKey).
+		prefix := key + string(os.PathSeparator)
 		for name := range l.byName {
 			if strings.HasPrefix(name, prefix) {
 				want[name] = struct{}{}
@@ -248,7 +250,7 @@ func (l *deletionLedger) Expand(names []string) ([]string, error) {
 }
 
 func parentOf(name string) string {
-	idx := strings.LastIndexByte(name, '/')
+	idx := strings.LastIndexByte(name, os.PathSeparator)
 	if idx <= 0 {
 		return ""
 	}
