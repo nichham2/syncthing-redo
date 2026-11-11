@@ -31,7 +31,7 @@ case "$target" in
 android)
     mkdir -p mobile/android/app/libs
     gomobile bind -target=android/arm64,android/amd64 -androidapi 29 \
-        -ldflags="-s -w" -o mobile/android/app/libs/keepsake-core.aar ./lib/mobile
+        -ldflags="-s -w -checklinkname=0" -o mobile/android/app/libs/keepsake-core.aar ./lib/mobile
     echo "Built mobile/android/app/libs/keepsake-core.aar"
     ;;
 ios)

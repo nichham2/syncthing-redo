@@ -36,8 +36,8 @@ const (
 	// Flags that should result in the Invalid bit on outgoing updates (or had it on ingoing ones)
 	LocalInvalidFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalMustRescan | FlagLocalReceiveOnly | FlagLocalRemoteInvalid | FlagLocalDeleteIgnored
 
-	// Flags for items that are deliberately not present locally and
-	// should neither be pulled nor counted towards the local state.
+	// LocalHiddenFlags marks items that are deliberately not present
+	// locally and should neither be pulled nor counted towards the local state.
 	LocalHiddenFlags = FlagLocalIgnored | FlagLocalDeleteIgnored
 
 	// Flags that should result in a file being in conflict with its

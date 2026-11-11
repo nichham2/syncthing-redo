@@ -31,7 +31,7 @@ func (s *folderDB) PutIgnoredDeletions(items []db.IgnoredDeletion) error {
 	if err != nil {
 		return wrap(err)
 	}
-	defer tx.Rollback() //nolint:errcheck
+	defer tx.Rollback()
 
 	//nolint:sqlclosecheck
 	stmt, err := tx.Preparex(`

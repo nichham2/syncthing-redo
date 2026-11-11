@@ -7,6 +7,7 @@
 package mobile
 
 import (
+	"context"
 	"time"
 
 	"github.com/syncthing/syncthing/lib/config"
@@ -70,7 +71,7 @@ func (s *Status) Settled() bool {
 	return true
 }
 
-func (n *Node) status() (*Status, error) {
+func (n *Node) status(ctx context.Context) (*Status, error) {
 	api, err := n.client()
 	if err != nil {
 		return nil, err
@@ -90,7 +91,7 @@ func (n *Node) status() (*Status, error) {
 			Address   string `json:"address"`
 		} `json:"connections"`
 	}
-	if err := api.get("/rest/system/connections", nil, &conns); err != nil {
+	if err := api.get(ctx, "/rest/system/connections", nil, &conns); err != nil {
 		return nil, err
 	}
 
@@ -100,7 +101,7 @@ func (n *Node) status() (*Status, error) {
 			At time.Time `json:"at"`
 		} `json:"lastFile"`
 	}
-	_ = api.get("/rest/stats/folder", nil, &folderStats)
+	_ = api.get(ctx, "/rest/stats/folder", nil, &folderStats)
 
 	for _, fcfg := range raw.Folders {
 		fs := FolderStatus{ID: fcfg.ID, Label: fcfg.Label}
@@ -113,7 +114,7 @@ func (n *Node) status() (*Status, error) {
 		}
 		if fcfg.Paused {
 			fs.State = "paused"
-		} else if err := api.get("/rest/db/status", map[string]string{"folder": fcfg.ID}, &dbs); err == nil {
+		} else if err := api.get(ctx, "/rest/db/status", map[string]string{"folder": fcfg.ID}, &dbs); err == nil {
 			fs.State, fs.Error = dbs.State, dbs.Error
 			fs.NeedItems, fs.NeedBytes, fs.LocalFiles = dbs.NeedTotal, dbs.NeedBytes, dbs.LocalFiles
 		} else {
@@ -123,7 +124,7 @@ func (n *Node) status() (*Status, error) {
 			var ign struct {
 				Items []struct{} `json:"items"`
 			}
-			if err := api.get("/rest/folder/ignoreddeletions", map[string]string{"folder": fcfg.ID}, &ign); err == nil {
+			if err := api.get(ctx, "/rest/folder/ignoreddeletions", map[string]string{"folder": fcfg.ID}, &ign); err == nil {
 				fs.IgnoredDeletions = len(ign.Items)
 			}
 		}
@@ -156,7 +157,7 @@ func (n *Node) status() (*Status, error) {
 				var comp struct {
 					Completion float64 `json:"completion"`
 				}
-				if err := api.get("/rest/db/completion", map[string]string{"folder": fcfg.ID, "device": ps.DeviceID}, &comp); err == nil {
+				if err := api.get(ctx, "/rest/db/completion", map[string]string{"folder": fcfg.ID, "device": ps.DeviceID}, &comp); err == nil {
 					ps.Completion[fcfg.ID] = comp.Completion
 				}
 			}

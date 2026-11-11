@@ -310,7 +310,7 @@ func (n *Node) Rescan(folderID, relPath string) error {
 	if relPath != "" {
 		q["sub"] = relPath
 	}
-	return api.post("/rest/db/scan", q, nil, nil)
+	return api.post(context.Background(), "/rest/db/scan", q, nil, nil)
 }
 
 // SetPaused pauses or resumes all device connections, e.g. when the user
@@ -321,14 +321,18 @@ func (n *Node) SetPaused(paused bool) error {
 		return err
 	}
 	if paused {
-		return api.post("/rest/system/pause", nil, nil, nil)
+		return api.post(context.Background(), "/rest/system/pause", nil, nil, nil)
 	}
-	return api.post("/rest/system/resume", nil, nil, nil)
+	return api.post(context.Background(), "/rest/system/resume", nil, nil, nil)
 }
 
 // StatusJSON returns the current Status as JSON.
 func (n *Node) StatusJSON() (string, error) {
-	st, err := n.status()
+	return n.statusJSON(context.Background())
+}
+
+func (n *Node) statusJSON(ctx context.Context) (string, error) {
+	st, err := n.status(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -359,7 +363,7 @@ func (n *Node) RunBackgroundSync(maxSeconds int64) (string, error) {
 
 	var last *Status
 	for time.Now().Before(deadline) {
-		st, err := n.status()
+		st, err := n.status(context.Background())
 		if err == nil {
 			last = st
 			if st.Settled() && time.Since(started) > minWait {
@@ -466,7 +470,7 @@ func (n *Node) forwardEvents(ctx context.Context, evLogger events.Logger) {
 					continue
 				}
 				lastStatePush = time.Now()
-				if js, err := n.StatusJSON(); err == nil {
+				if js, err := n.statusJSON(ctx); err == nil {
 					p.OnStateChanged(js)
 				} else {
 					slog.Debug("Mobile status", "error", err)

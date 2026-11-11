@@ -8,6 +8,7 @@ package mobile
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,7 +35,7 @@ func newAPIClient(base, apiKey string) *apiClient {
 	}
 }
 
-func (c *apiClient) do(method, path string, query map[string]string, body, out any) error {
+func (c *apiClient) do(ctx context.Context, method, path string, query map[string]string, body, out any) error {
 	u := c.base + path
 	if len(query) > 0 {
 		q := url.Values{}
@@ -51,11 +52,11 @@ func (c *apiClient) do(method, path string, query map[string]string, body, out a
 		}
 		rd = bytes.NewReader(bs)
 	}
-	req, err := http.NewRequest(method, u, rd)
+	req, err := http.NewRequestWithContext(ctx, method, u, rd)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-API-Key", c.apiKey)
+	req.Header.Set("X-Api-Key", c.apiKey)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -74,10 +75,10 @@ func (c *apiClient) do(method, path string, query map[string]string, body, out a
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-func (c *apiClient) get(path string, query map[string]string, out any) error {
-	return c.do(http.MethodGet, path, query, nil, out)
+func (c *apiClient) get(ctx context.Context, path string, query map[string]string, out any) error {
+	return c.do(ctx, http.MethodGet, path, query, nil, out)
 }
 
-func (c *apiClient) post(path string, query map[string]string, body, out any) error {
-	return c.do(http.MethodPost, path, query, body, out)
+func (c *apiClient) post(ctx context.Context, path string, query map[string]string, body, out any) error {
+	return c.do(ctx, http.MethodPost, path, query, body, out)
 }
