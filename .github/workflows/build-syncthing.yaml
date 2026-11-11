@@ -278,7 +278,8 @@ jobs:
 
   package-linux:
     name: Package for Linux (${{ matrix.group }})
-    runs-on: ubuntu-latest
+    # The MIPS64 cross compilers are packaged for this release.
+    runs-on: ubuntu-24.04
     needs:
       - facts
     strategy:
@@ -330,7 +331,7 @@ jobs:
 
       - name: Install extra packages
         if: matrix.extra-packages != ''
-        run: sudo apt-get install -y ${{ matrix.extra-packages }}
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.extra-packages }}
 
       - name: Create packages
         run: |
@@ -611,13 +612,17 @@ jobs:
           go mod vendor
           go run build.go assets
 
+          # The checkout directory is named after the repository, which
+          # differs in forks; the archive's top directory is always syncthing.
+          dir="$(basename "$PWD")"
           cd ..
 
           tar c -z -f "syncthing-source-$VERSION.tar.gz" \
             --exclude .git \
-            syncthing
+            --transform "s,^$dir,syncthing," \
+            "$dir"
 
-          mv "syncthing-source-$VERSION.tar.gz" syncthing
+          mv "syncthing-source-$VERSION.tar.gz" "$dir"
 
       - name: Archive artifacts
         uses: actions/upload-artifact@v4
@@ -721,7 +726,8 @@ jobs:
 
   package-debian:
     name: Package for Debian
-    runs-on: ubuntu-latest
+    # setup-ruby has no Ruby 3.0 build for the newer ubuntu-latest image.
+    runs-on: ubuntu-24.04
     needs:
       - facts
     env:

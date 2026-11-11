@@ -1,3 +1,43 @@
+<p align="center"><img src="mobile/branding/keepsake-icon.svg" width="96" alt="Keepsake icon"></p>
+
+# Keepsake
+
+**Your photos on all your phones. Delete here, keep there.**
+
+Keepsake syncs the photos on an iPhone and an Android phone, through an
+always-on hub (a computer or NAS), directly and privately over your own
+devices. No cloud account is involved.
+
+What makes it different from a plain sync tool: **deleting a photo on one
+phone removes it only from that phone.** The other phone and the hub keep
+it, and it is never downloaded back to the phone you deleted it from. Every
+phone has an **Ignored** list where you can restore a photo or, if you
+really mean it, delete it everywhere.
+
+* Photos keep their original bytes, EXIF, GPS location and capture date.
+* A mobile-first dashboard shows sync status, which devices are connected,
+  and when you last synced.
+* Encrypted device-to-device transfer (TLS), on your LAN or over the internet.
+
+| Start here | |
+|---|---|
+| [Install on your three devices](mobile/INSTALL.md) | Hub, Android phone, iPhone, then pairing |
+| [How the apps work](mobile/README.md) | What the apps do and how to build them |
+| [Architecture](mobile/ARCHITECTURE.md) | Deletion ledger, mobile bridge, dashboard |
+| [Branding](mobile/branding/README.md) | Name, icon, colours |
+
+### Built on Syncthing
+
+Keepsake is a fork of [Syncthing][15] and uses its sync engine unchanged
+apart from the additions above (the `nonDestructiveDeletes` folder option,
+the `/rest/folder/ignoreddeletions` API, the `lib/mobile` bridge and the
+`/mobile/` dashboard). It is not affiliated with or endorsed by the
+Syncthing project. Like Syncthing, it is licensed under the [MPLv2][7].
+
+The rest of this file is Syncthing's original README.
+
+---
+
 [![Syncthing][14]][15]
 
 ---

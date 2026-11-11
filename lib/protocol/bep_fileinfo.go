@@ -31,16 +31,21 @@ const (
 	FlagLocalGlobal        FlagLocal = 1 << 4 // 16: This is the global file version
 	FlagLocalNeeded        FlagLocal = 1 << 5 // 32: We need this file
 	FlagLocalRemoteInvalid FlagLocal = 1 << 6 // 64: The remote marked this as invalid
+	FlagLocalDeleteIgnored FlagLocal = 1 << 7 // 128: Deleted locally in a non-destructive folder; kept on other devices
 
 	// Flags that should result in the Invalid bit on outgoing updates (or had it on ingoing ones)
-	LocalInvalidFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalMustRescan | FlagLocalReceiveOnly | FlagLocalRemoteInvalid
+	LocalInvalidFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalMustRescan | FlagLocalReceiveOnly | FlagLocalRemoteInvalid | FlagLocalDeleteIgnored
+
+	// LocalHiddenFlags marks items that are deliberately not present
+	// locally and should neither be pulled nor counted towards the local state.
+	LocalHiddenFlags = FlagLocalIgnored | FlagLocalDeleteIgnored
 
 	// Flags that should result in a file being in conflict with its
 	// successor, due to us not having an up to date picture of its state on
 	// disk.
 	LocalConflictFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalReceiveOnly
 
-	LocalAllFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalMustRescan | FlagLocalReceiveOnly | FlagLocalGlobal | FlagLocalNeeded | FlagLocalRemoteInvalid
+	LocalAllFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalMustRescan | FlagLocalReceiveOnly | FlagLocalGlobal | FlagLocalNeeded | FlagLocalRemoteInvalid | FlagLocalDeleteIgnored
 )
 
 // localFlagBitNames maps flag values to characters which can be used to
@@ -53,6 +58,7 @@ var localFlagBitNames = map[FlagLocal]string{
 	FlagLocalGlobal:        "G",
 	FlagLocalNeeded:        "n",
 	FlagLocalRemoteInvalid: "v",
+	FlagLocalDeleteIgnored: "x",
 }
 
 func (f FlagLocal) IsInvalid() bool {
@@ -363,6 +369,13 @@ func (f FileInfo) IsIgnored() bool {
 	return f.LocalFlags&FlagLocalIgnored != 0
 }
 
+// IsDeleteIgnored returns true when the item was deleted locally in a
+// folder with non-destructive deletes enabled. The item is kept on other
+// devices and is not pulled back to this one.
+func (f FileInfo) IsDeleteIgnored() bool {
+	return f.LocalFlags&FlagLocalDeleteIgnored != 0
+}
+
 func (f FileInfo) MustRescan() bool {
 	return f.LocalFlags&FlagLocalMustRescan != 0
 }
@@ -582,6 +595,13 @@ func (f *FileInfo) SetMustRescan() {
 
 func (f *FileInfo) SetIgnored() {
 	f.setLocalFlags(FlagLocalIgnored)
+}
+
+// SetDeleteIgnored marks the item as deliberately deleted on this device
+// only. The version is retained so that other devices see the same
+// version, flagged invalid, and keep their copy.
+func (f *FileInfo) SetDeleteIgnored() {
+	f.setLocalFlags(FlagLocalDeleteIgnored)
 }
 
 func (f *FileInfo) SetUnsupported() {

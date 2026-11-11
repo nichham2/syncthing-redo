@@ -228,3 +228,18 @@ func (m metricsDB) PrefixKV(prefix string) (iter.Seq[KeyValue], func() error) {
 	defer m.account("-", "PrefixKV")()
 	return m.DB.PrefixKV(prefix)
 }
+
+func (m metricsDB) PutIgnoredDeletions(folder string, items []IgnoredDeletion) error {
+	defer m.account(folder, "PutIgnoredDeletions")()
+	return m.DB.PutIgnoredDeletions(folder, items)
+}
+
+func (m metricsDB) DeleteIgnoredDeletions(folder string, names []string) error {
+	defer m.account(folder, "DeleteIgnoredDeletions")()
+	return m.DB.DeleteIgnoredDeletions(folder, names)
+}
+
+func (m metricsDB) AllIgnoredDeletions(folder string) (iter.Seq[IgnoredDeletion], func() error) {
+	defer m.account(folder, "AllIgnoredDeletions")()
+	return m.DB.AllIgnoredDeletions(folder)
+}

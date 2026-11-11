@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="1024" height="1024">
+  <title>Keepsake</title>
+  <rect width="108" height="108" rx="24" fill="#2457D6"/>
+  <path fill="#fff" d="M34 32h40a8 8 0 0 1 8 8v28a8 8 0 0 1-8 8H34a8 8 0 0 1-8-8V40a8 8 0 0 1 8-8z"/>
+  <path fill="#2457D6" d="M33 68l14-15 9 9 6-6 13 12z"/>
+  <circle fill="#2457D6" cx="45" cy="45" r="5"/>
+  <path fill="#F5A524" d="M64 26h12v26l-6-5-6 5z"/>
+</svg>

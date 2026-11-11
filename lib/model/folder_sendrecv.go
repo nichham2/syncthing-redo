@@ -338,6 +338,17 @@ loop:
 			continue
 		}
 
+		if !file.IsDeleted() && f.ledger.Matches(file) {
+			// The user deleted this item (or an identical copy of it)
+			// on this device in a non-destructive folder. Record the
+			// remote version as delete-ignored so it is neither pulled
+			// now nor counted as needed later.
+			file.SetDeleteIgnored()
+			f.sl.DebugContext(ctx, "Keeping delete-ignored item away from this device", file.LogAttr())
+			dbUpdateChan <- dbUpdateJob{file, dbUpdateInvalidate}
+			continue
+		}
+
 		switch {
 		case f.ignores.Match(file.Name).IsIgnored():
 			file.SetIgnored()

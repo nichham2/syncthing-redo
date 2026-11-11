@@ -89,6 +89,11 @@ type folder struct {
 	puller    puller
 	versioner versioner.Versioner
 
+	// ledger tracks items deleted on this device in a folder with
+	// non-destructive deletes; see deletionledger.go and
+	// nondestructive.go.
+	ledger *deletionLedger
+
 	warnedKqueue bool
 }
 
@@ -136,6 +141,8 @@ func newFolder(model *model, ignores *ignore.Matcher, cfg config.FolderConfigura
 		restartWatchChan: make(chan struct{}, 1),
 
 		versioner: ver,
+
+		ledger: newDeletionLedger(cfg.ID, model.sdb),
 	}
 	f.pullPause = f.pullBasePause()
 	f.pullFailTimer = time.NewTimer(0)
@@ -727,6 +734,15 @@ func (f *folder) scanSubdirsChangedAndNew(ctx context.Context, subDirs []string,
 			changes++
 		}
 
+		// An item that was deleted non-destructively has reappeared on
+		// disk (the user put it back). It is tracked normally again.
+		if f.ledger.Has(res.File.Name) {
+			f.sl.DebugContext(ctx, "Previously delete-ignored item reappeared", slogutil.FilePath(res.File.Name))
+			if err := f.ledger.Remove(res.File.Name); err != nil {
+				return changes, err
+			}
+		}
+
 		switch f.Type {
 		case config.FolderTypeReceiveOnly, config.FolderTypeReceiveEncrypted:
 		default:
@@ -790,6 +806,13 @@ outer:
 				ignoredParent = ""
 			}
 
+			if fi.IsDeleteIgnored() {
+				// Deliberately absent from this device. If it has
+				// reappeared on disk the changed-and-new pass above
+				// has already picked it up again.
+				continue
+			}
+
 			switch ignored := f.ignores.Match(fi.Name).IsIgnored(); {
 			case fi.IsIgnored() && ignored:
 				continue
@@ -835,6 +858,12 @@ outer:
 					} else if changed {
 						changes++
 					}
+					continue
+				}
+				if handled, err := f.handleNonDestructiveDelete(ctx, fi, batch); err != nil {
+					return 0, err
+				} else if handled {
+					changes++
 					continue
 				}
 				nf := fi
