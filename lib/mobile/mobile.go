@@ -552,11 +552,12 @@ func loopbackGUIAddress(raw string) string {
 		port = "8384"
 	}
 	addr := net.JoinHostPort("127.0.0.1", port)
-	if l, err := net.Listen("tcp", addr); err == nil {
+	var lc net.ListenConfig
+	if l, err := lc.Listen(context.Background(), "tcp", addr); err == nil {
 		_ = l.Close()
 		return addr
 	}
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		return addr
 	}
@@ -630,7 +631,7 @@ func (n *Node) forwardEvents(ctx context.Context, evLogger events.Logger) {
 				select {
 				case changes <- change{folder, filepath.ToSlash(item), action}:
 				default:
-					slog.Warn("Mobile change queue full; the next library reconcile picks it up", "item", item)
+					slog.WarnContext(ctx, "Mobile change queue full; the next library reconcile picks it up", "item", item)
 				}
 			default:
 				select {
