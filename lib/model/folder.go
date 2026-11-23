@@ -173,6 +173,13 @@ func (f *folder) Serve(ctx context.Context) error {
 		return err // will get restarted by suture
 	}
 
+	if f.nonDestructiveDeletesActive() {
+		if err := f.repairLedger(); err != nil {
+			// Not fatal: the items stay hidden, just unlisted.
+			f.sl.WarnContext(ctx, "Failed to repair the deletion ledger", slogutil.Error(err))
+		}
+	}
+
 	if f.FSWatcherEnabled && f.getHealthErrorAndLoadIgnores() == nil {
 		f.startWatch(ctx)
 	}

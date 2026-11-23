@@ -113,6 +113,52 @@ func (f *folder) handleNonDestructiveDelete(ctx context.Context, fi protocol.Fil
 	return true, nil
 }
 
+// recordHiddenCopy makes sure a remote item that the puller keeps away
+// from this device because of the ledger is itself in the ledger. Items
+// matched by content under a new name would otherwise be flagged
+// delete-ignored without being listed anywhere, and could never be
+// restored.
+func (f *folder) recordHiddenCopy(file protocol.FileInfo) error {
+	if f.ledger.Has(file.Name) {
+		return nil
+	}
+	return f.ledger.Add(db.IgnoredDeletion{
+		Name:          file.Name,
+		Type:          file.Type,
+		Size:          file.Size,
+		ModNanos:      file.ModTime().UnixNano(),
+		BlocklistHash: file.BlocksHash,
+		IgnoredNanos:  time.Now().UnixNano(),
+	})
+}
+
+// repairLedger adds to the ledger any local entry that is flagged
+// delete-ignored but missing from it. Builds before recordHiddenCopy
+// existed left such entries behind for content matches.
+func (f *folder) repairLedger() error {
+	var missing []db.IgnoredDeletion
+	it, errFn := f.db.AllLocalFiles(f.folderID, protocol.LocalDeviceID)
+	for fi := range it {
+		if fi.IsDeleteIgnored() && !f.ledger.Has(fi.Name) {
+			missing = append(missing, db.IgnoredDeletion{
+				Name:          fi.Name,
+				Type:          fi.Type,
+				Size:          fi.Size,
+				ModNanos:      fi.ModTime().UnixNano(),
+				BlocklistHash: fi.BlocksHash,
+				IgnoredNanos:  time.Now().UnixNano(),
+			})
+		}
+	}
+	if err := errFn(); err != nil {
+		return err
+	}
+	if len(missing) > 0 {
+		f.sl.Info("Adding delete-ignored items missing from the ledger", "count", len(missing))
+	}
+	return f.ledger.Add(missing...)
+}
+
 // presentOnOtherDevice returns true if any remote device announces a
 // valid, non-deleted version of the named item.
 func (f *folder) presentOnOtherDevice(name string) (bool, error) {
@@ -164,12 +210,20 @@ func (f *folder) IgnoredDeletions() ([]IgnoredDeletion, error) {
 	return res, nil
 }
 
+// IgnoredDeletionsCount returns the number of entries in the ledger.
+func (f *folder) IgnoredDeletionsCount() (int, error) {
+	if err := f.ledger.load(); err != nil {
+		return 0, err
+	}
+	return f.ledger.Len(), nil
+}
+
 // RestoreIgnoredDeletions removes the named items (including anything
 // below them and their delete-ignored parent directories) from the ledger
 // and pulls them back from the other devices.
 func (f *folder) RestoreIgnoredDeletions(names []string) error {
 	return f.doInSync(func(ctx context.Context) error {
-		expanded, err := f.ledger.Expand(names)
+		expanded, err := f.ledger.Expand(names, true)
 		if err != nil || len(expanded) == 0 {
 			return err
 		}
@@ -188,6 +242,7 @@ func (f *folder) RestoreIgnoredDeletions(names []string) error {
 		if err := f.ledger.Remove(expanded...); err != nil {
 			return err
 		}
+		f.ledger.MarkRestored(expanded...)
 		// Forgetting our delete-ignored entry makes the global version
 		// needed again, so the puller fetches it.
 		if len(drop) > 0 {
@@ -205,7 +260,7 @@ func (f *folder) RestoreIgnoredDeletions(names []string) error {
 // regular deletions, so the items are removed from the other devices too.
 func (f *folder) PropagateIgnoredDeletions(names []string) error {
 	return f.doInSync(func(ctx context.Context) error {
-		expanded, err := f.ledger.Expand(names)
+		expanded, err := f.ledger.Expand(names, false)
 		if err != nil || len(expanded) == 0 {
 			return err
 		}
@@ -282,6 +337,14 @@ func (m *model) IgnoredDeletions(folder string) ([]IgnoredDeletion, error) {
 		return nil, err
 	}
 	return runner.IgnoredDeletions()
+}
+
+func (m *model) IgnoredDeletionsCount(folder string) (int, error) {
+	runner, err := m.folderRunner(folder)
+	if err != nil {
+		return 0, err
+	}
+	return runner.IgnoredDeletionsCount()
 }
 
 func (m *model) RestoreIgnoredDeletions(folder string, names []string) error {

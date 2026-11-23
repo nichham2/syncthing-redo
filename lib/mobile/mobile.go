@@ -38,6 +38,7 @@ import (
 	"github.com/syncthing/syncthing/lib/events"
 	"github.com/syncthing/syncthing/lib/locations"
 	"github.com/syncthing/syncthing/lib/protocol"
+	"github.com/syncthing/syncthing/lib/rand"
 	"github.com/syncthing/syncthing/lib/svcutil"
 	"github.com/syncthing/syncthing/lib/syncthing"
 )
@@ -74,6 +75,10 @@ type Node struct {
 	evLogger events.Logger
 	cert     tls.Certificate
 	api      *apiClient
+
+	// holds counts the callers that need the node running (the visible
+	// app, a background window, a foreground service); see Acquire.
+	holds int
 }
 
 // NewNode prepares a node that keeps its configuration, keys and database
@@ -177,18 +182,52 @@ func (n *Node) Start() error {
 	n.cancel = cancel
 	n.evLogger = evLogger
 	n.cert = cert
-	n.api = newAPIClient(cfg.GUI().URL(), cfg.GUI().APIKey)
+	n.api = newAPIClient(cfg.GUI().URL(), cfg.GUI().APIKey, cfg.MyID())
 
 	go n.forwardEvents(ctx, evLogger)
 	return nil
 }
 
-// Stop stops Syncthing and waits for it to shut down. Call it when the OS
-// is about to suspend the app, so the database is closed cleanly.
+// Acquire records that the caller needs the node running, and starts it if
+// it isn't. Every Acquire must be paired with a Release. Use it from every
+// place that runs at the same time as another (the visible app, OS
+// background windows, a foreground service), so that one of them finishing
+// does not stop the node under the others.
+func (n *Node) Acquire() error {
+	n.mut.Lock()
+	n.holds++
+	n.mut.Unlock()
+	if err := n.Start(); err != nil {
+		n.mut.Lock()
+		n.holds--
+		n.mut.Unlock()
+		return err
+	}
+	return nil
+}
+
+// Release undoes one Acquire. The node stops when the last holder
+// releases it.
+func (n *Node) Release() {
+	n.mut.Lock()
+	if n.holds > 0 {
+		n.holds--
+	}
+	last := n.holds == 0
+	n.mut.Unlock()
+	if last {
+		n.Stop()
+	}
+}
+
+// Stop stops Syncthing and waits for it to shut down, regardless of
+// holders. Call it when the OS is about to suspend the app, so the
+// database is closed cleanly.
 func (n *Node) Stop() {
 	n.mut.Lock()
 	app, cancel := n.app, n.cancel
-	n.app, n.cancel, n.api = nil, nil, nil
+	n.app, n.cancel, n.api, n.cfg = nil, nil, nil, nil
+	n.holds = 0
 	n.mut.Unlock()
 	if app == nil {
 		return
@@ -221,10 +260,26 @@ func (n *Node) DashboardURL() string {
 	return strings.TrimSuffix(gui.URL(), "/") + "/mobile/#apikey=" + gui.APIKey
 }
 
+// photoIgnores keep platform clutter out of the photo folder. Android's
+// trash renames a deleted photo to ".trashed-<expiry>-<name>" next to it,
+// the camera writes ".pending-<time>-<name>" while saving, and the bridges
+// write ".keepsake-*.tmp" while exporting.
+var photoIgnores = []string{
+	"(?d).trashed-*",
+	"(?d).pending-*",
+	"(?d).thumbnails",
+	"(?d).nomedia",
+	"(?d).keepsake-*.tmp",
+	"(?d).DS_Store",
+	"(?d)Thumbs.db",
+}
+
 // EnsurePhotoFolder creates or updates the photo folder: send & receive,
-// non-destructive deletes, permissions ignored (mobile file systems do not
-// carry meaningful POSIX permissions) and a short rescan interval as a
-// backstop for the file system watcher.
+// permissions ignored (mobile file systems do not carry meaningful POSIX
+// permissions), a short rescan interval as a backstop for the file system
+// watcher, and the photoIgnores patterns. Non-destructive deletes are
+// switched on when the folder is created; after that the user's choice in
+// the dashboard is kept.
 func (n *Node) EnsurePhotoFolder(folderID, label, path string) error {
 	cfg, err := n.config()
 	if err != nil {
@@ -241,10 +296,12 @@ func (n *Node) EnsurePhotoFolder(folderID, label, path string) error {
 			fcfg.ID = folderID
 			fcfg.Devices = []config.FolderDeviceConfiguration{{DeviceID: myID}}
 		}
+		if !ok {
+			fcfg.NonDestructiveDeletes = true
+		}
 		fcfg.Label = label
 		fcfg.Path = path
 		fcfg.Type = config.FolderTypeSendReceive
-		fcfg.NonDestructiveDeletes = true
 		fcfg.IgnorePerms = true
 		fcfg.FSWatcherEnabled = true
 		fcfg.RescanIntervalS = 3600
@@ -259,7 +316,41 @@ func (n *Node) EnsurePhotoFolder(folderID, label, path string) error {
 		return err
 	}
 	waiter.Wait()
-	return cfg.Save()
+	if err := cfg.Save(); err != nil {
+		return err
+	}
+	return n.ensureIgnores(folderID)
+}
+
+// ensureIgnores adds any missing photoIgnores pattern to the folder's
+// ignore patterns, keeping the user's own.
+func (n *Node) ensureIgnores(folderID string) error {
+	api, err := n.client()
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	q := map[string]string{"folder": folderID}
+	var cur struct {
+		Ignore []string `json:"ignore"`
+	}
+	if err := api.get(ctx, "/rest/db/ignores", q, &cur); err != nil {
+		return err
+	}
+	have := make(map[string]bool, len(cur.Ignore))
+	for _, p := range cur.Ignore {
+		have[p] = true
+	}
+	lines := cur.Ignore
+	for _, p := range photoIgnores {
+		if !have[p] {
+			lines = append(lines, p)
+		}
+	}
+	if len(lines) == len(cur.Ignore) {
+		return nil
+	}
+	return api.post(ctx, "/rest/db/ignores", q, map[string][]string{"ignore": lines}, nil)
 }
 
 // AddPeer adds (or renames) a device and shares every photo folder with it.
@@ -346,14 +437,15 @@ func (n *Node) statusJSON(ctx context.Context) (string, error) {
 // with every connected peer (or the time budget runs out), then stops the
 // node again if it was not running before. It returns the final Status as
 // JSON. maxSeconds should leave headroom before the OS deadline.
+//
+// It holds the node (see Acquire) for its duration, so it neither stops a
+// node that the visible app is using nor leaves running a node that nobody
+// else holds.
 func (n *Node) RunBackgroundSync(maxSeconds int64) (string, error) {
-	wasRunning := n.IsRunning()
-	if !wasRunning {
-		if err := n.Start(); err != nil {
-			return "", err
-		}
-		defer n.Stop()
+	if err := n.Acquire(); err != nil {
+		return "", err
 	}
+	defer n.Release()
 
 	deadline := time.Now().Add(time.Duration(maxSeconds) * time.Second)
 	// Give discovery and connections a moment before judging "settled".
@@ -363,6 +455,9 @@ func (n *Node) RunBackgroundSync(maxSeconds int64) (string, error) {
 
 	var last *Status
 	for time.Now().Before(deadline) {
+		if !n.IsRunning() {
+			break // stopped by the OS expiration handler
+		}
 		st, err := n.status(context.Background())
 		if err == nil {
 			last = st
@@ -389,7 +484,7 @@ func (n *Node) RunBackgroundSync(maxSeconds int64) (string, error) {
 func (n *Node) config() (config.Wrapper, error) {
 	n.mut.Lock()
 	defer n.mut.Unlock()
-	if n.cfg == nil {
+	if n.cfg == nil || n.app == nil {
 		return nil, errors.New("node is not running")
 	}
 	return n.cfg, nil
@@ -405,19 +500,26 @@ func (n *Node) client() (*apiClient, error) {
 }
 
 // applyMobileDefaults adjusts a configuration for running inside a phone
-// app: loopback-only GUI with an API key, no self-upgrades, no usage
-// reporting prompt, no browser to open.
+// app: loopback-only GUI protected by a password nobody types (every
+// legitimate caller uses the API key), no self-upgrades, no usage reporting
+// prompt, no browser to open.
+//
+// On a phone other apps share the loopback interface, so without a GUI
+// password any of them could load the GUI, collect a CSRF cookie and use
+// the whole REST API (add a device, share the photo folder with it).
 func applyMobileDefaults(cfg config.Wrapper) error {
+	var authErr error
 	waiter, err := cfg.Modify(func(c *config.Configuration) {
-		host, port, err := net.SplitHostPort(c.GUI.RawAddress)
-		if err != nil || (host != "127.0.0.1" && host != "localhost" && host != "::1") {
-			if port == "" {
-				port = "8384"
-			}
-			c.GUI.RawAddress = net.JoinHostPort("127.0.0.1", port)
-		}
+		c.GUI.RawAddress = loopbackGUIAddress(c.GUI.RawAddress)
 		c.GUI.Enabled = true
 		c.GUI.RawUseTLS = false // loopback only
+		c.GUI.InsecureSkipHostCheck = false
+		c.GUI.InsecureAdminAccess = false
+		if !c.GUI.IsAuthEnabled() {
+			c.GUI.AuthMode = config.AuthModeStatic
+			c.GUI.User = "keepsake"
+			authErr = c.GUI.SetPassword(rand.String(32))
+		}
 		c.Options.StartBrowser = false
 		c.Options.AutoUpgradeIntervalH = 0
 		if c.Options.URAccepted == 0 {
@@ -432,16 +534,81 @@ func applyMobileDefaults(cfg config.Wrapper) error {
 	if err != nil {
 		return err
 	}
+	if authErr != nil {
+		return authErr
+	}
 	waiter.Wait()
 	return cfg.Save()
 }
 
+// loopbackGUIAddress returns a loopback address for the GUI. It keeps the
+// configured port when it is free, and otherwise picks a free one, so that
+// another app already listening on the port (on purpose or not) never
+// receives the API key or serves the dashboard.
+func loopbackGUIAddress(raw string) string {
+	host, port, err := net.SplitHostPort(raw)
+	if err != nil || (host != "127.0.0.1" && host != "localhost" && host != "::1") || port == "" || port == "0" {
+		port = "8384"
+	}
+	addr := net.JoinHostPort("127.0.0.1", port)
+	if l, err := net.Listen("tcp", addr); err == nil {
+		_ = l.Close()
+		return addr
+	}
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return addr
+	}
+	defer l.Close()
+	return l.Addr().String()
+}
+
 // forwardEvents relays core events to the native side.
+//
+// It never does slow work on the event subscription itself: the event
+// logger drops events for a subscriber that is not ready within a few
+// milliseconds, and a dropped ItemFinished used to mean a received photo
+// never reached the photo library. Changes go to a buffered queue drained
+// by their own goroutine (the native catch-up pass covers an overflow),
+// and status snapshots are built on another goroutine, coalesced, with the
+// last change of a burst always delivered.
 func (n *Node) forwardEvents(ctx context.Context, evLogger events.Logger) {
 	sub := evLogger.Subscribe(events.ItemFinished | events.StateChanged | events.DeviceConnected | events.DeviceDisconnected)
 	defer sub.Unsubscribe()
 
-	var lastStatePush time.Time
+	type change struct{ folder, item, action string }
+	changes := make(chan change, 4096)
+	statusDirty := make(chan struct{}, 1)
+	defer close(changes)
+	defer close(statusDirty)
+
+	go func() {
+		for c := range changes {
+			if p := n.getPlatform(); p != nil {
+				p.OnRemoteChange(c.folder, c.item, c.action)
+			}
+		}
+	}()
+	go func() {
+		for range statusDirty {
+			// Let a burst of state changes settle, then report once.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+			p := n.getPlatform()
+			if p == nil {
+				continue
+			}
+			if js, err := n.statusJSON(ctx); err == nil {
+				p.OnStateChanged(js)
+			} else {
+				slog.Debug("Mobile status", "error", err)
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -449,10 +616,6 @@ func (n *Node) forwardEvents(ctx context.Context, evLogger events.Logger) {
 		case ev, ok := <-sub.C():
 			if !ok {
 				return
-			}
-			p := n.getPlatform()
-			if p == nil {
-				continue
 			}
 			switch ev.Type {
 			case events.ItemFinished:
@@ -463,17 +626,15 @@ func (n *Node) forwardEvents(ctx context.Context, evLogger events.Logger) {
 				folder, _ := data["folder"].(string)
 				item, _ := data["item"].(string)
 				action, _ := data["action"].(string)
-				p.OnRemoteChange(folder, filepath.ToSlash(item), action)
-			default:
-				// Coalesce bursts of state changes.
-				if time.Since(lastStatePush) < 500*time.Millisecond {
-					continue
+				select {
+				case changes <- change{folder, filepath.ToSlash(item), action}:
+				default:
+					slog.Warn("Mobile change queue full; the next library reconcile picks it up", "item", item)
 				}
-				lastStatePush = time.Now()
-				if js, err := n.statusJSON(ctx); err == nil {
-					p.OnStateChanged(js)
-				} else {
-					slog.Debug("Mobile status", "error", err)
+			default:
+				select {
+				case statusDirty <- struct{}{}:
+				default: // a snapshot is already pending
 				}
 			}
 		}

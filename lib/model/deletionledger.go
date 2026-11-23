@@ -35,6 +35,12 @@ type deletionLedger struct {
 	loaded bool
 	byName map[string]db.IgnoredDeletion
 	byHash map[string]int // string(blocklist hash) -> number of entries with that hash
+
+	// restored holds names the user restored in this run. They are not
+	// kept away by content, even when another ledger entry has the same
+	// content (restoring a copy of a deleted photo must bring it back).
+	// In memory only: once pulled, the item is on disk and not needed.
+	restored map[string]struct{}
 }
 
 func newDeletionLedger(folder string, sdb db.DB) *deletionLedger {
@@ -42,7 +48,8 @@ func newDeletionLedger(folder string, sdb db.DB) *deletionLedger {
 		folder: folder,
 		sdb:    sdb,
 		byName: make(map[string]db.IgnoredDeletion),
-		byHash: make(map[string]int),
+		byHash:   make(map[string]int),
+		restored: make(map[string]struct{}),
 	}
 }
 
@@ -140,6 +147,9 @@ func (l *deletionLedger) Matches(file protocol.FileInfo) bool {
 	if file.IsDirectory() || file.IsSymlink() || len(file.BlocksHash) == 0 {
 		return false
 	}
+	if _, ok := l.restored[ledgerKey(file.Name)]; ok {
+		return false
+	}
 	return l.byHash[string(file.BlocksHash)] > 0
 }
 
@@ -191,6 +201,16 @@ func (l *deletionLedger) Remove(names ...string) error {
 	return nil
 }
 
+// MarkRestored exempts the given names from content matching for the rest
+// of this run; see restored.
+func (l *deletionLedger) MarkRestored(names ...string) {
+	l.mut.Lock()
+	defer l.mut.Unlock()
+	for _, n := range names {
+		l.restored[ledgerKey(n)] = struct{}{}
+	}
+}
+
 // All returns all entries, sorted by name.
 func (l *deletionLedger) All() ([]db.IgnoredDeletion, error) {
 	if err := l.load(); err != nil {
@@ -207,16 +227,26 @@ func (l *deletionLedger) All() ([]db.IgnoredDeletion, error) {
 }
 
 // Expand returns the given names plus every ledger entry below any of
-// them (so restoring an album restores its photos) and every ledger entry
-// above them (so the parent directories come back too). The result is
-// sorted and de-duplicated, and only contains names that are in the
-// ledger.
-func (l *deletionLedger) Expand(names []string) ([]string, error) {
+// them (so restoring an album restores its photos) and, with withParents,
+// every ledger entry above them (so the parent directories come back too).
+// The result is sorted and de-duplicated, and only contains names that are
+// in the ledger.
+//
+// Deleting everywhere must not use withParents: deleting one photo of a
+// locally deleted album would otherwise delete the album directory on the
+// other devices too.
+func (l *deletionLedger) Expand(names []string, withParents bool) ([]string, error) {
 	if err := l.load(); err != nil {
 		return nil, err
 	}
 	l.mut.RLock()
 	defer l.mut.RUnlock()
+
+	sorted := make([]string, 0, len(l.byName))
+	for name := range l.byName {
+		sorted = append(sorted, name)
+	}
+	sort.Strings(sorted)
 
 	want := make(map[string]struct{})
 	for _, n := range names {
@@ -227,12 +257,14 @@ func (l *deletionLedger) Expand(names []string) ([]string, error) {
 		if _, ok := l.byName[key]; ok {
 			want[key] = struct{}{}
 		}
-		// Ledger keys use native separators (see ledgerKey).
+		// Ledger keys use native separators (see ledgerKey). The keys are
+		// sorted, so everything below key is one contiguous run.
 		prefix := key + string(os.PathSeparator)
-		for name := range l.byName {
-			if strings.HasPrefix(name, prefix) {
-				want[name] = struct{}{}
-			}
+		for i := sort.SearchStrings(sorted, prefix); i < len(sorted) && strings.HasPrefix(sorted[i], prefix); i++ {
+			want[sorted[i]] = struct{}{}
+		}
+		if !withParents {
+			continue
 		}
 		for parent := parentOf(key); parent != ""; parent = parentOf(parent) {
 			if _, ok := l.byName[parent]; ok {

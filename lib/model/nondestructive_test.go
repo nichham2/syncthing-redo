@@ -298,3 +298,88 @@ func TestNonDestructiveDeleteReappearedFileLeavesLedger(t *testing.T) {
 		t.Error("ledger should be empty, got", items)
 	}
 }
+
+// A copy of a deleted photo under another name is kept away, and it must
+// be listed and restorable like the original.
+func TestNonDestructiveDeleteHiddenCopyIsListedAndRestorable(t *testing.T) {
+	m, fc, tfs, _ := setupNonDestructive(t)
+
+	const name, copyName = "IMG_0005.jpg", "copy-of-5.jpg"
+	photo := []byte("photo five")
+	syncFromRemote(t, m, fc, tfs, name, photo)
+	must(t, tfs.Remove(name))
+	must(t, m.ScanFolder("default"))
+
+	fc.addFile(copyName, 0o644, protocol.FileInfoTypeFile, photo)
+	fc.sendIndexUpdate()
+	waitFor(t, "copy to be recorded as delete-ignored", func() bool {
+		f, ok := m.testCurrentFolderFile("default", copyName)
+		return ok && f.IsDeleteIgnored()
+	})
+
+	items, err := m.IgnoredDeletions("default")
+	must(t, err)
+	if len(items) != 2 {
+		t.Fatal("expected the original and the copy in the ledger, got", items)
+	}
+	if n, err := m.IgnoredDeletionsCount("default"); err != nil || n != 2 {
+		t.Error("count", n, err)
+	}
+
+	must(t, m.RestoreIgnoredDeletions("default", []string{copyName}))
+	waitFor(t, "restored copy to be pulled", func() bool {
+		return equalContents(tfs, copyName, photo) == nil
+	})
+}
+
+// Deleting everywhere one photo of a locally deleted album must not delete
+// the album directory on the other devices.
+func TestNonDestructiveDeletePropagateKeepsParent(t *testing.T) {
+	m, fc, tfs, sent := setupNonDestructive(t)
+
+	a, b := filepath.Join("Album2", "a.jpg"), filepath.Join("Album2", "b.jpg")
+	must(t, tfs.MkdirAll("Album2", 0o755))
+	fc.addFile("Album2", 0o755, protocol.FileInfoTypeDirectory, nil)
+	syncFromRemote(t, m, fc, tfs, a, []byte("photo a2"))
+	syncFromRemote(t, m, fc, tfs, b, []byte("photo b2"))
+	must(t, tfs.RemoveAll("Album2"))
+	must(t, m.ScanFolder("default"))
+
+	must(t, m.PropagateIgnoredDeletions("default", []string{a}))
+	waitFor(t, "deletion of a.jpg to be announced", func() bool {
+		f, ok := sent.get(a)
+		return ok && f.IsDeleted()
+	})
+	if f, ok := sent.get("Album2"); ok && f.IsDeleted() {
+		t.Error("the album directory was deleted everywhere")
+	}
+	items, err := m.IgnoredDeletions("default")
+	must(t, err)
+	if len(items) != 2 {
+		t.Error("expected the album and b.jpg to stay in the ledger, got", items)
+	}
+}
+
+// Once an item is deleted everywhere, its ledger entry goes away, so a new
+// photo that reuses the name syncs.
+func TestNonDestructiveDeleteLedgerPrunedOnRemoteDelete(t *testing.T) {
+	m, fc, tfs, _ := setupNonDestructive(t)
+
+	const name = "IMG_0006.jpg"
+	syncFromRemote(t, m, fc, tfs, name, []byte("old photo six"))
+	must(t, tfs.Remove(name))
+	must(t, m.ScanFolder("default"))
+
+	fc.deleteFile(name)
+	fc.sendIndexUpdate()
+	waitFor(t, "ledger entry to be pruned", func() bool {
+		n, err := m.IgnoredDeletionsCount("default")
+		return err == nil && n == 0
+	})
+
+	fc.updateFile(name, 0o644, protocol.FileInfoTypeFile, []byte("a different, newer photo"))
+	fc.sendIndexUpdate()
+	waitFor(t, "new photo with the reused name to sync", func() bool {
+		return equalContents(tfs, name, []byte("a different, newer photo")) == nil
+	})
+}

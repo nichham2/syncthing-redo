@@ -16,6 +16,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/syncthing/syncthing/lib/protocol"
 )
 
 // apiClient talks to the node's own REST API over loopback. Using the
@@ -24,14 +26,18 @@ import (
 type apiClient struct {
 	base   string
 	apiKey string
+	myID   protocol.DeviceID
 	http   *http.Client
 }
 
-func newAPIClient(base, apiKey string) *apiClient {
+func newAPIClient(base, apiKey string, myID protocol.DeviceID) *apiClient {
 	return &apiClient{
 		base:   strings.TrimSuffix(base, "/"),
 		apiKey: apiKey,
-		http:   &http.Client{Timeout: 10 * time.Second},
+		myID:   myID,
+		// Scans of large files can take a while; the timeout only guards
+		// against a hung server.
+		http: &http.Client{Timeout: 2 * time.Minute},
 	}
 }
 
@@ -65,6 +71,11 @@ func (c *apiClient) do(ctx context.Context, method, path string, query map[strin
 		return err
 	}
 	defer resp.Body.Close()
+	// Only talk to our own node. Another process listening on the port
+	// would not answer with our device ID.
+	if got := resp.Header.Get("X-Syncthing-Id"); got != c.myID.String() {
+		return fmt.Errorf("%s %s: unexpected server %q on %s", method, path, got, c.base)
+	}
 	if resp.StatusCode != http.StatusOK {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, strings.TrimSpace(string(msg)))

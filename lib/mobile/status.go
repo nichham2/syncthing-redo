@@ -122,10 +122,10 @@ func (n *Node) status(ctx context.Context) (*Status, error) {
 		}
 		if fcfg.NonDestructiveDeletes && !fcfg.Paused {
 			var ign struct {
-				Items []struct{} `json:"items"`
+				Count int `json:"count"`
 			}
-			if err := api.get(ctx, "/rest/folder/ignoreddeletions", map[string]string{"folder": fcfg.ID}, &ign); err == nil {
-				fs.IgnoredDeletions = len(ign.Items)
+			if err := api.get(ctx, "/rest/folder/ignoreddeletions", map[string]string{"folder": fcfg.ID, "countonly": "true"}, &ign); err == nil {
+				fs.IgnoredDeletions = ign.Count
 			}
 		}
 		if s, ok := folderStats[fcfg.ID]; ok {

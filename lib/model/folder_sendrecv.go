@@ -338,11 +338,36 @@ loop:
 			continue
 		}
 
-		if !file.IsDeleted() && f.ledger.Matches(file) {
+		if file.IsDeleted() {
+			if f.ledger.Has(file.Name) {
+				// Deleted everywhere now: the ledger entry has done its
+				// job. Dropping it lets a new item that later reuses the
+				// name (cameras recycle file names) sync normally.
+				if err := f.ledger.Remove(file.Name); err != nil {
+					f.sl.WarnContext(ctx, "Failed to prune the deletion ledger", slogutil.FilePath(file.Name), slogutil.Error(err))
+				}
+			}
+			if cur, ok, err := f.db.GetDeviceFile(f.folderID, protocol.LocalDeviceID, file.Name); err == nil && ok && cur.IsDeleteIgnored() && !file.IsDirectory() {
+				// Nothing on disk to delete: the item was already gone
+				// from this device. Only record the deletion; going
+				// through the deleter would fail forever with "modified
+				// but not rescanned", as the scanner skips such items.
+				dbUpdateChan <- dbUpdateJob{file, dbUpdateDeleteFile}
+				continue
+			}
+		}
+
+		if !file.IsDeleted() && f.nonDestructiveDeletesActive() && f.ledger.Matches(file) {
 			// The user deleted this item (or an identical copy of it)
 			// on this device in a non-destructive folder. Record the
 			// remote version as delete-ignored so it is neither pulled
-			// now nor counted as needed later.
+			// now nor counted as needed later. A copy under another name
+			// goes into the ledger too, so that it is listed and can be
+			// restored like the original.
+			if err := f.recordHiddenCopy(file); err != nil {
+				f.newPullError(file.Name, fmt.Errorf("recording delete-ignored copy: %w", err))
+				continue
+			}
 			file.SetDeleteIgnored()
 			f.sl.DebugContext(ctx, "Keeping delete-ignored item away from this device", file.LogAttr())
 			dbUpdateChan <- dbUpdateJob{file, dbUpdateInvalidate}
