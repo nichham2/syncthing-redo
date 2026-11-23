@@ -235,4 +235,3 @@ func TestEnsurePhotoFolderKeepsUserChoicesAndIgnores(t *testing.T) {
 		}
 	}
 }
-

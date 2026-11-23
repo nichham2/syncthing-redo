@@ -45,9 +45,9 @@ type deletionLedger struct {
 
 func newDeletionLedger(folder string, sdb db.DB) *deletionLedger {
 	return &deletionLedger{
-		folder: folder,
-		sdb:    sdb,
-		byName: make(map[string]db.IgnoredDeletion),
+		folder:   folder,
+		sdb:      sdb,
+		byName:   make(map[string]db.IgnoredDeletion),
 		byHash:   make(map[string]int),
 		restored: make(map[string]struct{}),
 	}
