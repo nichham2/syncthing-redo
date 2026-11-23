@@ -113,6 +113,8 @@ func isNoAuthPath(path string, metricsWithoutAuth bool) bool {
 		"/syncthing/",
 		"/vendor/",
 		"/theme-assets/", // This leaks information from config, but probably not sensitive
+		"/mobile/",       // Keepsake dashboard: static files; it calls /rest with the API key
+		"/qr/",           // Renders the text it is given (the device ID image on /mobile/)
 
 		// No-auth API endpoints
 		"/rest/noauth",

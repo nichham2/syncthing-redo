@@ -127,11 +127,19 @@
           <label class="switch"><input type="checkbox" id="toggle-pause-all"><span aria-hidden="true"></span>
             <span class="visually-hidden">Pause all syncing</span></label>
         </li>
+        <li class="row" id="row-keep-syncing" hidden>
+          <div class="row-main">
+            <span class="row-title">Keep syncing</span>
+            <span class="row-sub">Syncs continuously with a notification (Android limits this to a few hours a day)</span>
+          </div>
+          <label class="switch"><input type="checkbox" id="toggle-keep-syncing"><span aria-hidden="true"></span>
+            <span class="visually-hidden">Keep syncing</span></label>
+        </li>
       </ul>
 
       <h2 class="section-title">Advanced</h2>
       <ul class="list">
-        <li class="row"><a class="row-link" href="../">Open the advanced sync engine settings</a></li>
+        <li class="row"><a class="row-link" id="open-advanced" href="../">Open the advanced sync engine settings</a></li>
       </ul>
       <p class="muted small center" id="version"></p>
     </section>

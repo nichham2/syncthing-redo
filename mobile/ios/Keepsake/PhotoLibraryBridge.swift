@@ -18,6 +18,11 @@
 //   * File arrives from the other device -> imported with
 //     PHAssetCreationRequest from the original bytes, creation date taken
 //     from the file, and recorded in the mapping so it is not re-exported.
+//     Every reconcile also imports staging files that are in neither
+//     direction of the mapping, so a missed notification is caught up.
+//
+// The mapping is saved after every change, so an interrupted pass never
+// exports the same photo twice.
 
 import Foundation
 import Photos
@@ -27,6 +32,13 @@ actor PhotoLibraryBridge {
     private let stagingDir: URL
     private unowned let service: SyncthingService
     private var mapping: AssetMapping
+    /// Staging paths being imported right now. `reconcile` can run while an
+    /// import waits for Photos (actor re-entrancy at `await`), and must not
+    /// export the brand-new asset back as a new file.
+    private var importing = Set<String>()
+    /// Original file names of the imports above, for matching the new
+    /// asset before its identifier is known.
+    private var importingNames = [String: Int]()
 
     init(stagingDir: URL, service: SyncthingService) {
         self.stagingDir = stagingDir
@@ -43,14 +55,17 @@ actor PhotoLibraryBridge {
 
     // MARK: Photos -> staging folder
 
-    /// Brings the staging folder in line with the photo library. Cheap when
-    /// nothing changed; call on launch, on foreground and at the start of
-    /// every background window.
+    /// Brings the staging folder in line with the photo library, then
+    /// imports anything that arrived from other devices but never made it
+    /// into Photos. Cheap when nothing changed; call on launch, on
+    /// foreground and at the start of every background window.
     func reconcile() async {
-        guard PHPhotoLibrary.authorizationStatus(for: .readWrite) != .denied else { return }
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard status == .authorized || status == .limited else { return }
 
         let opts = PHFetchOptions()
-        opts.includeAssetSourceTypes = [.typeUserLibrary, .typeCloudShared, .typeiTunesSynced]
+        // Not .typeCloudShared: shared albums hold other people's photos.
+        opts.includeAssetSourceTypes = [.typeUserLibrary, .typeiTunesSynced]
         opts.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
         let assets = PHAsset.fetchAssets(with: opts)
 
@@ -65,45 +80,77 @@ actor PhotoLibraryBridge {
         }
 
         for asset in toExport {
+            if isBeingImported(asset) { continue }
             if let rel = await export(asset) {
+                // On disk before Syncthing sees the file: a crash after this
+                // point can no longer turn into a duplicate export.
                 mapping.set(asset.localIdentifier, relPath: rel)
+                mapping.save()
                 service.rescan(rel)
             }
         }
 
-        // Assets that are gone from Photos were deleted by the user.
-        for (id, rel) in mapping.all where !present.contains(id) {
-            let url = stagingDir.appendingPathComponent(rel)
-            try? FileManager.default.removeItem(at: url)
-            mapping.remove(id)
-            service.rescan(rel)
+        // Assets that are gone from Photos were deleted by the user. Only
+        // with full access: under limited access the fetch shows just the
+        // selected photos, and everything else is merely hidden from us.
+        if status == .authorized {
+            var removed = false
+            for (id, rel) in mapping.all where !present.contains(id) {
+                let url = stagingDir.appendingPathComponent(rel)
+                try? FileManager.default.removeItem(at: url)
+                mapping.remove(id)
+                removed = true
+                service.rescan(rel)
+            }
+            if removed { mapping.save() }
         }
-        mapping.save()
+
+        await importMissing()
+    }
+
+    private func isBeingImported(_ asset: PHAsset) -> Bool {
+        guard !importingNames.isEmpty else { return false }
+        let names = PHAssetResource.assetResources(for: asset).map(\.originalFilename)
+        return names.contains { importingNames[$0, default: 0] > 0 }
     }
 
     private func export(_ asset: PHAsset) async -> String? {
         let resources = PHAssetResource.assetResources(for: asset)
-        // The unedited original keeps full quality and all metadata.
+        // The unedited original keeps full quality and all metadata. (A Live
+        // Photo's paired video and edits are not synced yet.)
         guard let original = resources.first(where: { $0.type == .photo || $0.type == .video })
             ?? resources.first else { return nil }
 
         let date = asset.creationDate ?? Date()
         let comps = Calendar(identifier: .gregorian).dateComponents([.year, .month], from: date)
         let dir = String(format: "%04d/%02d", comps.year ?? 1970, comps.month ?? 1)
-        let rel = uniqueRelPath(dir: dir, name: original.originalFilename)
-        let url = stagingDir.appendingPathComponent(rel)
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
-                                                 withIntermediateDirectories: true)
+        let dirURL = stagingDir.appendingPathComponent(dir)
+        try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true)
+
+        // Written under a temporary name (ignored by Syncthing, see
+        // lib/mobile photoIgnores) and moved into place when complete.
+        let tmp = dirURL.appendingPathComponent(".keepsake-\(UUID().uuidString).tmp")
 
         let opts = PHAssetResourceRequestOptions()
         opts.isNetworkAccessAllowed = true // fetch iCloud originals
         do {
-            try await PHAssetResourceManager.default().writeData(for: original, toFile: url, options: opts)
+            try await PHAssetResourceManager.default().writeData(for: original, toFile: tmp, options: opts)
             try FileManager.default.setAttributes([.modificationDate: date, .creationDate: date],
-                                                  ofItemAtPath: url.path)
+                                                  ofItemAtPath: tmp.path)
+            // A file left by an earlier export whose mapping was never
+            // saved: adopt it rather than exporting a "(1)" duplicate.
+            let plain = "\(dir)/\(original.originalFilename)"
+            let plainURL = stagingDir.appendingPathComponent(plain)
+            if !mapping.hasRelPath(plain),
+               FileManager.default.contentsEqual(atPath: plainURL.path, andPath: tmp.path) {
+                try? FileManager.default.removeItem(at: tmp)
+                return plain
+            }
+            let rel = uniqueRelPath(dir: dir, name: original.originalFilename)
+            try FileManager.default.moveItem(at: tmp, to: stagingDir.appendingPathComponent(rel))
             return rel
         } catch {
-            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: tmp)
             return nil
         }
     }
@@ -143,17 +190,49 @@ actor PhotoLibraryBridge {
         }
     }
 
+    /// Imports staging files that are neither our exports nor already
+    /// imported: files received while the app was not told about them
+    /// (dropped events, a crash between download and import).
+    private func importMissing() async {
+        let root = stagingDir.standardizedFileURL.path + "/"
+        guard let walker = FileManager.default.enumerator(
+            at: stagingDir, includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]) else { return }
+        var pending: [String] = []
+        while let url = walker.nextObject() as? URL {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+                  Self.isMedia(url) else { continue }
+            let rel = String(url.standardizedFileURL.path.dropFirst(root.count))
+            if mapping.localIdentifier(for: rel) == nil && !importing.contains(rel) {
+                pending.append(rel)
+            }
+        }
+        for rel in pending {
+            await importIntoPhotos(relPath: rel)
+        }
+    }
+
     private func importIntoPhotos(relPath: String) async {
         let url = stagingDir.appendingPathComponent(relPath)
-        let type: PHAssetResourceType = UTTypeIsMovie(url) ? .video : .photo
+        guard Self.isMedia(url), !importing.contains(relPath) else { return }
+        let type: PHAssetResourceType = Self.isMovie(url) ? .video : .photo
         let created = captureDate(of: url)
+
+        let name = url.lastPathComponent
+        importing.insert(relPath)
+        importingNames[name, default: 0] += 1
+        defer {
+            importing.remove(relPath)
+            importingNames[name, default: 1] -= 1
+            if importingNames[name] == 0 { importingNames[name] = nil }
+        }
 
         let placeholder = IdentifierBox()
         do {
             try await PHPhotoLibrary.shared().performChanges {
                 let req = PHAssetCreationRequest.forAsset()
                 let opts = PHAssetResourceCreationOptions()
-                opts.originalFilename = url.lastPathComponent
+                opts.originalFilename = name
                 req.addResource(with: type, fileURL: url, options: opts) // original bytes
                 req.creationDate = created
                 placeholder.value = req.placeholderForCreatedAsset?.localIdentifier
@@ -182,8 +261,18 @@ actor PhotoLibraryBridge {
         return (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
     }
 
-    private func UTTypeIsMovie(_ url: URL) -> Bool {
-        ["mov", "mp4", "m4v", "3gp"].contains(url.pathExtension.lowercased())
+    private static let movieExtensions: Set<String> = ["mov", "mp4", "m4v", "3gp"]
+    private static let imageExtensions: Set<String> = ["jpg", "jpeg", "heic", "heif", "png", "gif", "webp", "dng", "tif", "tiff", "avif"]
+
+    static func isMovie(_ url: URL) -> Bool { movieExtensions.contains(url.pathExtension.lowercased()) }
+
+    /// Only photos and videos go into the library: never Android trash,
+    /// thumbnails, sidecars or temporary files.
+    static func isMedia(_ url: URL) -> Bool {
+        let name = url.lastPathComponent
+        if name.hasPrefix(".") { return false }
+        let ext = url.pathExtension.lowercased()
+        return imageExtensions.contains(ext) || movieExtensions.contains(ext)
     }
 }
 

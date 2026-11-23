@@ -570,6 +570,28 @@
             .catch(function (err) { e.target.checked = !e.target.checked; fail(err); });
     });
 
+    // Native switches, only when running inside the Android app.
+    var native = window.KeepsakeNative;
+    if (native && native.setKeepSyncing) {
+        $('row-keep-syncing').hidden = false;
+        $('toggle-keep-syncing').checked = !!native.isKeepSyncing();
+        $('toggle-keep-syncing').addEventListener('change', function (e) {
+            native.setKeepSyncing(e.target.checked);
+            toast(e.target.checked ? 'Keeping your photos in sync' : 'Syncing in the background only');
+        });
+    }
+
+    // The embedded engine's full GUI is password protected (see
+    // lib/mobile applyMobileDefaults). Trade the API key for a one-time
+    // login token so the user lands there signed in.
+    $('open-advanced').addEventListener('click', function (e) {
+        if (!apiKey) return; // plain browser session: let the GUI ask
+        e.preventDefault();
+        post('auth/logintoken')
+            .then(function (r) { location.href = '../?token=' + encodeURIComponent(r.token); })
+            .catch(function () { location.href = '../'; });
+    });
+
     $('toggle-pause-all').addEventListener('change', function (e) {
         post(e.target.checked ? 'system/pause' : 'system/resume')
             .then(function () { scheduleRefresh(0); })

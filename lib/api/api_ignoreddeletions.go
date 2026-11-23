@@ -17,7 +17,7 @@ import (
 
 // Endpoints for the non-destructive deletion ledger ("ignored files").
 //
-//	GET  /rest/folder/ignoreddeletions?folder=ID
+//	GET  /rest/folder/ignoreddeletions?folder=ID [&countonly=true]
 //	POST /rest/folder/ignoreddeletions/restore?folder=ID    {"names": [...]}
 //	POST /rest/folder/ignoreddeletions/propagate?folder=ID  {"names": [...]}
 
@@ -27,6 +27,17 @@ type ignoredDeletionsRequest struct {
 
 func (s *service) getFolderIgnoredDeletions(w http.ResponseWriter, r *http.Request) {
 	folder := r.URL.Query().Get("folder")
+	if r.URL.Query().Get("countonly") == "true" {
+		// Cheap: no per-item availability lookups. Used by the mobile
+		// bridge's status, which is polled often.
+		n, err := s.model.IgnoredDeletionsCount(folder)
+		if err != nil {
+			http.Error(w, err.Error(), ignoredDeletionsErrorStatus(err))
+			return
+		}
+		sendJSON(w, map[string]any{"folder": folder, "count": n})
+		return
+	}
 	items, err := s.model.IgnoredDeletions(folder)
 	if err != nil {
 		http.Error(w, err.Error(), ignoredDeletionsErrorStatus(err))

@@ -55,6 +55,8 @@ The CI workflow does all of this; see [`INSTALL.md`](INSTALL.md) for downloading
 go run build.go build syncthing
 ./syncthing serve
 # open http://127.0.0.1:8384/mobile/ in a phone-sized browser window
+# (on the phones the engine has a random GUI password and the apps use the
+# API key; on a desktop build the dashboard uses the normal GUI login)
 ```
 
 Enable "Keep photos on other devices" for a folder in the dashboard's Settings tab,

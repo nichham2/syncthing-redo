@@ -301,6 +301,19 @@ type Model struct {
 		result1 []model.IgnoredDeletion
 		result2 error
 	}
+	IgnoredDeletionsCountStub        func(string) (int, error)
+	ignoredDeletionsCountMutex       sync.RWMutex
+	ignoredDeletionsCountArgsForCall []struct {
+		arg1 string
+	}
+	ignoredDeletionsCountReturns struct {
+		result1 int
+		result2 error
+	}
+	ignoredDeletionsCountReturnsOnCall map[int]struct {
+		result1 int
+		result2 error
+	}
 	IndexStub        func(protocol.Connection, *protocol.Index) error
 	indexMutex       sync.RWMutex
 	indexArgsForCall []struct {
@@ -2095,6 +2108,70 @@ func (fake *Model) IgnoredDeletionsReturnsOnCall(i int, result1 []model.IgnoredD
 	}
 	fake.ignoredDeletionsReturnsOnCall[i] = struct {
 		result1 []model.IgnoredDeletion
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *Model) IgnoredDeletionsCount(arg1 string) (int, error) {
+	fake.ignoredDeletionsCountMutex.Lock()
+	ret, specificReturn := fake.ignoredDeletionsCountReturnsOnCall[len(fake.ignoredDeletionsCountArgsForCall)]
+	fake.ignoredDeletionsCountArgsForCall = append(fake.ignoredDeletionsCountArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.IgnoredDeletionsCountStub
+	fakeReturns := fake.ignoredDeletionsCountReturns
+	fake.recordInvocation("IgnoredDeletionsCount", []interface{}{arg1})
+	fake.ignoredDeletionsCountMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2
+	}
+	return fakeReturns.result1, fakeReturns.result2
+}
+
+func (fake *Model) IgnoredDeletionsCountCallCount() int {
+	fake.ignoredDeletionsCountMutex.RLock()
+	defer fake.ignoredDeletionsCountMutex.RUnlock()
+	return len(fake.ignoredDeletionsCountArgsForCall)
+}
+
+func (fake *Model) IgnoredDeletionsCountCalls(stub func(string) (int, error)) {
+	fake.ignoredDeletionsCountMutex.Lock()
+	defer fake.ignoredDeletionsCountMutex.Unlock()
+	fake.IgnoredDeletionsCountStub = stub
+}
+
+func (fake *Model) IgnoredDeletionsCountArgsForCall(i int) string {
+	fake.ignoredDeletionsCountMutex.RLock()
+	defer fake.ignoredDeletionsCountMutex.RUnlock()
+	argsForCall := fake.ignoredDeletionsCountArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *Model) IgnoredDeletionsCountReturns(result1 int, result2 error) {
+	fake.ignoredDeletionsCountMutex.Lock()
+	defer fake.ignoredDeletionsCountMutex.Unlock()
+	fake.IgnoredDeletionsCountStub = nil
+	fake.ignoredDeletionsCountReturns = struct {
+		result1 int
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *Model) IgnoredDeletionsCountReturnsOnCall(i int, result1 int, result2 error) {
+	fake.ignoredDeletionsCountMutex.Lock()
+	defer fake.ignoredDeletionsCountMutex.Unlock()
+	fake.IgnoredDeletionsCountStub = nil
+	if fake.ignoredDeletionsCountReturnsOnCall == nil {
+		fake.ignoredDeletionsCountReturnsOnCall = make(map[int]struct {
+			result1 int
+			result2 error
+		})
+	}
+	fake.ignoredDeletionsCountReturnsOnCall[i] = struct {
+		result1 int
 		result2 error
 	}{result1, result2}
 }
