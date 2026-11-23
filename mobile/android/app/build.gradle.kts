@@ -14,7 +14,8 @@ android {
         applicationId = appId
         minSdk = 29 // Android 10: scoped storage APIs used by MediaStoreBridge
         targetSdk = 35
-        versionCode = 1
+        // Increases with every CI run so updates install over the old app.
+        versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "0.1.0"
         resValue("string", "app_name", appName)
         ndk {
@@ -23,11 +24,27 @@ android {
         }
     }
 
+    // Release builds are signed with your own key, from these environment
+    // variables (CI sets them from the ANDROID_* secrets). Keep the same key
+    // forever: Android only installs an update signed with the same key, and
+    // uninstalling to switch keys wipes the app's sync state.
+    val keystorePath = System.getenv("KEYSTORE_PATH")
+    signingConfigs {
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Sign release builds with your own key; debug builds are
-            // signed with the debug key and can be sideloaded directly.
+            isDebuggable = false
+            if (keystorePath != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 

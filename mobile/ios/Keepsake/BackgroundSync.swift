@@ -53,15 +53,18 @@ enum BackgroundSync {
         try? BGTaskScheduler.shared.submit(processing)
     }
 
-    /// Keeps syncing for the short grace period after backgrounding.
+    /// Keeps syncing for the short grace period after backgrounding, then
+    /// gives up the foreground hold so the engine stops.
+    @MainActor
     static func finishInBackground() {
         var id: UIBackgroundTaskIdentifier = .invalid
         id = UIApplication.shared.beginBackgroundTask(withName: "keepsake-finish") {
             SyncthingService.shared.stop()
             UIApplication.shared.endBackgroundTask(id)
         }
-        Task {
+        Task { @MainActor in
             _ = await SyncthingService.shared.runBackgroundSync(maxSeconds: 20)
+            SyncthingService.shared.leaveForeground()
             UIApplication.shared.endBackgroundTask(id)
         }
     }
@@ -69,10 +72,7 @@ enum BackgroundSync {
     private static func run(_ task: BGTask, budgetSeconds: Int64) {
         schedule() // always line up the next window
         let work = Task {
-            do { try SyncthingService.shared.start() } catch {
-                task.setTaskCompleted(success: false)
-                return
-            }
+            // runBackgroundSync holds the engine itself and lets go at the end.
             _ = await SyncthingService.shared.runBackgroundSync(maxSeconds: budgetSeconds)
             task.setTaskCompleted(success: true)
         }

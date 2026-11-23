@@ -19,8 +19,7 @@ struct KeepsakeApp: App {
         .onChange(of: scenePhase) { phase in
             switch phase {
             case .active:
-                try? SyncthingService.shared.start()
-                Task { await SyncthingService.shared.library.reconcile() }
+                Task { await SyncthingService.shared.enterForeground() }
             case .background:
                 BackgroundSync.schedule()
                 BackgroundSync.finishInBackground()

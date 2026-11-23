@@ -10,7 +10,8 @@ Keepsake runs on three devices:
 
 Why a hub? Phones only sync while both are awake and online, and iOS gives
 apps short background windows. With a hub, each phone only needs to reach the
-hub, whenever it gets the chance. The hub also acts as a backup.
+hub, whenever it gets the chance. With versioning switched on (step 1.6), the
+hub also keeps deleted photos for 30 days, as a safety net.
 
 You do the steps in this order: hub, Android, iPhone, then pairing.
 
@@ -51,6 +52,22 @@ without a Mac.
    * **Mac:** *System Settings*, *General*, *Login Items*, add `keepsake-hub`.
    * **Linux:** copy `etc/linux-systemd/user/syncthing.service` to `~/.config/systemd/user/keepsake-hub.service`, change `ExecStart` to the path of `keepsake-hub`, then run `systemctl --user enable --now keepsake-hub`.
 
+6. Once the phones have shared the `photos` folder with the hub and you accepted it (step 4), open the folder on the hub (*Edit*):
+   * *File Versioning*: choose **Trash Can File Versioning** and keep files for 30 days. A "Delete everywhere" from a phone, or a mistake on the hub, can then still be undone from the hub's `.stversions` folder.
+   * *Ignore Patterns*: add these lines, so phone clutter (Android's trash and pending files, temporary files) stays off the hub:
+
+     ```
+     (?d).trashed-*
+     (?d).pending-*
+     (?d).thumbnails
+     (?d).nomedia
+     (?d).keepsake-*.tmp
+     (?d).DS_Store
+     (?d)Thumbs.db
+     ```
+
+     The phones set these themselves.
+
 The hub needs no port forwarding. It finds the phones through global discovery and relays.
 
 Building the hub yourself instead: install Go, then run `go run build.go build syncthing` in the repository. The program is `./syncthing`.
@@ -59,16 +76,22 @@ Building the hub yourself instead: install Go, then run `go run build.go build s
 
 ## 2. Android phone
 
-1. Unzip `keepsake-android-apk` and copy `app-debug.apk` to the phone (USB, Google Drive, email to yourself…).
+1. Unzip `keepsake-android-apk` and copy the `.apk` inside to the phone (USB, Google Drive, email to yourself…).
 2. Open the APK on the phone. Android asks you to allow installing unknown apps for the app you opened it with (Files, Chrome, …). Allow it, then tap **Install**.
-   * Or, with USB debugging on: `adb install app-debug.apk`.
-3. Open **Keepsake** and allow:
+   * Or, with USB debugging on: `adb install <file>.apk`.
+3. Open **Keepsake**. It asks for:
    * **Photos and videos**: needed to read your photos.
-   * **All files access** (*Settings*, *Apps*, *Keepsake*, *Permissions*, *Files and media*, *Allow management of all files*). Recommended: Keepsake then syncs `DCIM/Camera` directly with no extra copy. Without it, Keepsake keeps its own copy and adds incoming photos to `DCIM/Keepsake`.
    * **Notifications**: for the "keeping your photos in sync" notice.
+   * **All files access**, once, on first launch. Choose **Allow** (recommended): Keepsake then syncs `DCIM/Camera` directly with no extra copy. With **Use a copy**, Keepsake keeps its own copy of your camera photos and videos and adds incoming ones to `DCIM/Keepsake`. This choice is fixed for the install, because moving the synced folder later would upload everything again.
+   * For near-real-time syncing, turn on *Settings*, **Keep syncing** in the app.
 4. For reliable background syncing: *Settings*, *Apps*, *Keepsake*, *Battery*, **Unrestricted**.
 
-This is a debug build signed with a development key. That's fine for your own phones. To publish on Google Play, see "Publishing" below.
+**Updates.** Android installs an update only if it is signed with the same key as the installed app, and uninstalling first deletes Keepsake's sync state (the phone then counts as a new device, and photos you deleted only on this phone come back). So set up a signing key once, before you install:
+
+1. Create a key: `keytool -genkeypair -v -keystore keepsake.jks -alias keepsake -keyalg RSA -keysize 4096 -validity 36500`. Keep the file and its password safe; you need the same key for every future update.
+2. In the GitHub repository, *Settings*, *Secrets and variables*, *Actions*, add the secrets `ANDROID_KEYSTORE_B64` (the output of `base64 -w0 keepsake.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`keepsake`) and `ANDROID_KEY_PASSWORD`.
+
+The workflow then builds a signed release APK whose version number goes up with every run, so each new download installs over the last one. Without the secrets it builds a debug APK as before; debug APKs from different runs can't update each other.
 
 Building the APK yourself instead: install Android Studio with the NDK, plus Go, then run:
 
@@ -198,11 +221,12 @@ The first sync copies every photo. Do it on Wi-Fi with the phones plugged in and
 |---|---|
 | Phone stays "Waiting for your devices" | Is the hub running? Is the hub's ID correct on the phone? Did you accept the phone on the hub? |
 | iPhone app won't open after a week | The free Apple ID 7-day limit. Install it again with your sideloading tool (or let AltStore refresh it), or press Run again in Xcode. |
-| Android photos don't appear in Gallery | Grant *All files access*, or look in the `DCIM/Keepsake` album. |
+| Android photos don't appear in Gallery | Look in the `DCIM/Keepsake` album (if you chose *Use a copy*), and open the app once: it adds anything that was missed. |
+| "App not installed" when updating Android | The new APK is signed with another key. Set up the signing secrets (step 2) so this doesn't happen again; the first time, you have to uninstall. |
 | Android syncs rarely | Set battery usage to *Unrestricted*; keep Wi-Fi on. |
 | Sync is slow on cellular | Pause syncing in Settings, or set Wi-Fi-only (default on Android). |
 
 ## Publishing (optional, later)
 
-* **Google Play:** create a release signing key, add a `signingConfig` to `mobile/android/app/build.gradle.kts`, build with `gradle bundleRelease`, and declare the *All files access* use ("file sync / backup") in the Play Console.
+* **Google Play:** with the signing key from step 2, build with `gradle bundleRelease` and declare the *All files access* use ("file sync / backup") in the Play Console.
 * **App Store:** needs the paid developer account, App Store screenshots, and a privacy policy (Keepsake sends photos only to your own paired devices).

@@ -77,7 +77,7 @@ type Node struct {
 	api      *apiClient
 
 	// holds counts the callers that need the node running (the visible
-	// app, a background window, a foreground service); see Acquire.
+	// app, a background window, a foreground service); see Hold.
 	holds int
 }
 
@@ -188,12 +188,13 @@ func (n *Node) Start() error {
 	return nil
 }
 
-// Acquire records that the caller needs the node running, and starts it if
-// it isn't. Every Acquire must be paired with a Release. Use it from every
+// Hold records that the caller needs the node running, and starts it if
+// it isn't. Every Hold must be paired with an Unhold. (Not "Release":
+// that name clashes with NSObject in the iOS binding.) Use it from every
 // place that runs at the same time as another (the visible app, OS
 // background windows, a foreground service), so that one of them finishing
 // does not stop the node under the others.
-func (n *Node) Acquire() error {
+func (n *Node) Hold() error {
 	n.mut.Lock()
 	n.holds++
 	n.mut.Unlock()
@@ -206,9 +207,9 @@ func (n *Node) Acquire() error {
 	return nil
 }
 
-// Release undoes one Acquire. The node stops when the last holder
+// Unhold undoes one Hold. The node stops when the last holder
 // releases it.
-func (n *Node) Release() {
+func (n *Node) Unhold() {
 	n.mut.Lock()
 	if n.holds > 0 {
 		n.holds--
@@ -438,14 +439,14 @@ func (n *Node) statusJSON(ctx context.Context) (string, error) {
 // node again if it was not running before. It returns the final Status as
 // JSON. maxSeconds should leave headroom before the OS deadline.
 //
-// It holds the node (see Acquire) for its duration, so it neither stops a
+// It holds the node (see Hold) for its duration, so it neither stops a
 // node that the visible app is using nor leaves running a node that nobody
 // else holds.
 func (n *Node) RunBackgroundSync(maxSeconds int64) (string, error) {
-	if err := n.Acquire(); err != nil {
+	if err := n.Hold(); err != nil {
 		return "", err
 	}
-	defer n.Release()
+	defer n.Unhold()
 
 	deadline := time.Now().Add(time.Duration(maxSeconds) * time.Second)
 	// Give discovery and connections a moment before judging "settled".

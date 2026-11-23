@@ -6,12 +6,13 @@
 //
 // Periodic background sync with WorkManager. Android runs it at most every
 // 15 minutes, within the user's constraints (Wi-Fi only, charging only),
-// and Doze may defer it further. Each run is a bounded window: start the
-// node, sync until settled or the budget is spent, stop the node.
+// and Doze may defer it further. Each run is a bounded window: hold the
+// node, sync until settled or the budget is spent, let go of the node.
 
 package app.keepsake
 
 import android.content.Context
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -32,6 +33,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             SyncthingNode.runBackgroundSync(maxSeconds = 8L * 60)
             Result.success()
         } catch (e: Exception) {
+            Log.w("Keepsake", "Background sync failed", e)
             Result.retry()
         }
     }

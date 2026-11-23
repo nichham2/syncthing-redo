@@ -9,6 +9,7 @@
 // reachable on loopback; the API key travels in the URL fragment.
 
 import SwiftUI
+import UIKit
 import WebKit
 
 struct DashboardView: View {
@@ -16,18 +17,33 @@ struct DashboardView: View {
 
     var body: some View {
         Group {
-            if let url = service.dashboardURL {
+            switch service.state {
+            case .running(let url):
                 WebView(url: url).ignoresSafeArea(edges: .bottom)
-            } else {
+            case .starting:
                 ProgressView("Starting Keepsake…")
+            case .needsPhotoAccess:
+                VStack(spacing: 16) {
+                    Text("Keepsake needs access to your photos to sync them.")
+                        .multilineTextAlignment(.center)
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                }
+                .padding()
+            case .failed(let message):
+                VStack(spacing: 16) {
+                    Text("Keepsake couldn’t start").font(.headline)
+                    Text(message).font(.footnote).multilineTextAlignment(.center)
+                    Button("Try again") { Task { await service.enterForeground() } }
+                }
+                .padding()
             }
         }
-        .task {
-            if await PhotoLibraryBridge.requestAccess() {
-                try? service.start()
-                await service.library.reconcile()
-            }
-        }
+        // scenePhase changes don't fire for the initial launch.
+        .task { await service.enterForeground() }
     }
 }
 
@@ -45,5 +61,11 @@ private struct WebView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ view: WKWebView, context: Context) {}
+    func updateUIView(_ view: WKWebView, context: Context) {
+        // The engine can come back on another port (it moves off a port
+        // that another app holds); follow it.
+        if view.url?.port != url.port {
+            view.load(URLRequest(url: url))
+        }
+    }
 }

@@ -90,13 +90,37 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: mobile/build-bridge.sh android
+      # With the ANDROID_KEYSTORE_B64 (and password/alias) secrets set, this
+      # builds a release APK signed with your key, which installs as an update
+      # over the previous one. Without them it falls back to a debug build;
+      # debug builds from different runs use different keys and can't update
+      # each other (see mobile/INSTALL.md).
       - name: Build APK
         working-directory: mobile/android
-        run: gradle --no-daemon assembleDebug
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p dist
+          if [ -n "$KEYSTORE_B64" ]; then
+            export KEYSTORE_PATH="$RUNNER_TEMP/release.jks"
+            printf '%s' "$KEYSTORE_B64" | base64 -d > "$KEYSTORE_PATH"
+            gradle --no-daemon assembleRelease
+            cp app/build/outputs/apk/release/*.apk dist/
+          else
+            echo "::warning::ANDROID_KEYSTORE_B64 is not set; building a debug APK that can't update earlier installs."
+            gradle --no-daemon assembleDebug
+            cp app/build/outputs/apk/debug/*.apk dist/
+          fi
+      - name: Remove the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
       - uses: actions/upload-artifact@v4
         with:
           name: keepsake-android-apk
-          path: mobile/android/app/build/outputs/apk/debug/*.apk
+          path: mobile/android/dist/*.apk
 
   ios:
     name: iOS (unsigned IPA)
@@ -206,4 +230,6 @@ jobs:
           xcodebuild -exportArchive -archivePath build/Keepsake.xcarchive \
             -exportOptionsPlist build/ExportOptions.plist -exportPath build/export \
             "${auth[@]}"
-          rm -f "$key"
+      - name: Remove the App Store Connect key
+        if: always()
+        run: rm -f "$RUNNER_TEMP"/AuthKey_*.p8

@@ -15,26 +15,39 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 
 class SyncthingService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private var held = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ServiceCompat.startForeground(
             this, 1, notification(),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0,
         )
-        Thread {
-            SyncthingNode.init(this)
-            runCatching { SyncthingNode.start() }.onFailure { stopSelf() }
-        }.start()
+        if (!held) {
+            held = true
+            SyncthingNode.bridgeExecutor.execute {
+                runCatching {
+                    SyncthingNode.init(this)
+                    SyncthingNode.hold()
+                    SyncthingNode.reconcile()
+                }.onFailure {
+                    held = false
+                    stopSelf()
+                }
+            }
+        }
         return START_STICKY
     }
 
@@ -44,8 +57,28 @@ class SyncthingService : Service() {
     }
 
     override fun onDestroy() {
-        Thread { SyncthingNode.stop() }.start()
+        // Let go of our hold only: the dashboard or a background run may
+        // still be using the node.
+        if (held) {
+            held = false
+            SyncthingNode.bridgeExecutor.execute { SyncthingNode.unhold() }
+        }
         super.onDestroy()
+    }
+
+    companion object {
+        private const val PREFS = "keepsake"
+        private const val KEY = "keepSyncing"
+
+        fun isEnabled(context: Context) =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY, false)
+
+        /** The user's "Keep syncing" switch. */
+        fun setEnabled(context: Context, on: Boolean) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY, on).apply()
+            val intent = Intent(context, SyncthingService::class.java)
+            if (on) ContextCompat.startForegroundService(context, intent) else context.stopService(intent)
+        }
     }
 
     private fun notification(): Notification {

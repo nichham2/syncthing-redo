@@ -26,8 +26,21 @@ final class SyncthingService: NSObject, MobilePlatformProtocol {
     private(set) var node: MobileNode?
     private(set) lazy var library = PhotoLibraryBridge(stagingDir: photoDir, service: self)
 
+    enum State: Equatable {
+        case starting
+        case running(URL)
+        case needsPhotoAccess
+        case failed(String)
+    }
+
+    /// What the dashboard screen shows.
+    @Published private(set) var state: State = .starting
+
     /// Latest status snapshot, for the native UI and widgets.
     @Published private(set) var lastStatusJSON: String = "{}"
+
+    /// Whether the visible app currently holds the node (see Node.Hold).
+    private var foregroundHeld = false
 
     private override init() {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -43,24 +56,71 @@ final class SyncthingService: NSObject, MobilePlatformProtocol {
 
     // MARK: Lifecycle
 
-    func start() throws {
-        if node == nil {
-            var err: NSError?
-            guard let n = MobileNewNode(homeDir.path, &err) else {
-                throw err ?? NSError(domain: "Syncthing", code: 1)
-            }
-            n.setPlatform(self)
-            node = n
+    private func makeNode() throws -> MobileNode {
+        if let node { return node }
+        var err: NSError?
+        guard let n = MobileNewNode(homeDir.path, &err) else {
+            throw err ?? NSError(domain: "Syncthing", code: 1)
         }
-        guard let node else { return }
-        try node.start()
-        try node.ensurePhotoFolder(Self.photoFolderID, label: "Camera Roll", path: photoDir.path)
+        n.setPlatform(self)
+        node = n
+        return n
     }
 
-    /// Called when the app moves to the background without a background
-    /// task, so the database is closed cleanly before suspension.
+    /// Takes one hold on the engine (starting it if needed) and makes sure
+    /// the photo folder exists. Pair every call with `unhold()`.
+    func hold() throws {
+        let n = try makeNode()
+        try n.hold()
+        do {
+            try n.ensurePhotoFolder(Self.photoFolderID, label: "Camera Roll", path: photoDir.path)
+        } catch {
+            n.unhold()
+            throw error
+        }
+    }
+
+    func unhold() {
+        node?.unhold()
+    }
+
+    /// The app became visible: keep the engine running while it is.
+    @MainActor
+    func enterForeground() async {
+        guard await PhotoLibraryBridge.requestAccess() else {
+            state = .needsPhotoAccess
+            return
+        }
+        if !foregroundHeld {
+            do {
+                try hold()
+                foregroundHeld = true
+            } catch {
+                state = .failed(error.localizedDescription)
+                return
+            }
+        }
+        if let url = dashboardURL { state = .running(url) }
+        await library.reconcile()
+    }
+
+    /// The app left the screen: give up the foreground hold once the
+    /// short grace period is over (BackgroundSync.finishInBackground).
+    @MainActor
+    func leaveForeground() {
+        guard foregroundHeld else { return }
+        foregroundHeld = false
+        unhold()
+    }
+
+    /// Stops the engine whoever holds it, so the database is closed
+    /// cleanly before the OS suspends the app.
     func stop() {
         node?.stop()
+        DispatchQueue.main.async {
+            self.foregroundHeld = false
+            if case .running = self.state { self.state = .starting }
+        }
     }
 
     var dashboardURL: URL? {
@@ -76,8 +136,12 @@ final class SyncthingService: NSObject, MobilePlatformProtocol {
 
     /// Runs one background window: export new photos, apply deletions
     /// made in Apple Photos, then let Syncthing sync until settled or the
-    /// budget runs out.
+    /// budget runs out. Holds the engine for the whole window, so it
+    /// neither stops an engine the visible app uses nor leaves one running
+    /// that nobody needs.
     func runBackgroundSync(maxSeconds: Int64) async -> String {
+        do { try hold() } catch { return "{}" }
+        defer { unhold() }
         await library.reconcile()
         return await withCheckedContinuation { cont in
             DispatchQueue.global(qos: .utility).async {

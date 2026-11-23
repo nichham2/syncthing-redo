@@ -165,7 +165,17 @@ folder** in the app container plus a `localIdentifier ↔ path` mapping.
 * **Import:** files arriving from Android are added with
   `PHAssetCreationRequest.addResource(with:fileURL:)` (original bytes, not
   re-encoded); `creationDate` comes from EXIF `DateTimeOriginal` or the
-  preserved mtime. The mapping prevents re-exporting them.
+  preserved mtime. The mapping prevents re-exporting them. Every reconcile
+  also imports staging files that are in neither direction of the mapping,
+  so a missed notification is caught up.
+* **Crash safety:** exports are written to a `.keepsake-*.tmp` file (in the
+  folder's ignore patterns) and moved into place; the mapping is saved after
+  every change; a leftover file with the same bytes is adopted rather than
+  exported again as `name (1).ext`.
+* **Limited access:** deletions are only inferred with full Photos access;
+  under limited access new selected photos are exported, nothing is removed.
+  iCloud Shared Albums are not exported. A Live Photo's paired video and
+  edits are not synced yet.
 * **Deletion in Photos:** detected by diffing the mapping against the
   library; the staging file is removed and Syncthing records a local-only
   deletion. "Delete everywhere" from the other phone deletes the asset,
@@ -173,7 +183,9 @@ folder** in the app container plus a `localIdentifier ↔ path` mapping.
 * **Background:** no persistent background execution on iOS.
   `BGAppRefreshTask` (~30 s), `BGProcessingTask` (minutes, usually overnight
   while charging) and the ~30 s grace period after backgrounding each call
-  `RunBackgroundSync`; the expiration handler stops the node.
+  `RunBackgroundSync`; the expiration handler stops the node. The visible
+  app and each window take a hold on the node (`Node.Hold`/`Unhold`), so
+  one finishing never stops it under another.
 * **Permissions:** `NSPhotoLibraryUsageDescription`,
   `NSPhotoLibraryAddUsageDescription`, `NSLocalNetworkUsageDescription`;
   LAN discovery broadcasts need Apple's multicast entitlement (without it,
@@ -190,10 +202,14 @@ by PhotoKit, which Syncthing's filesystem abstraction allows.
   their original bytes and mtimes. New files are announced to the gallery
   with `MediaScannerConnection.scanFile`. Deleting in the gallery removes the
   file, and Syncthing records it as a local-only deletion.
-* **Staging mode** (only `READ_MEDIA_IMAGES/VIDEO`): mirrors MediaStore into
-  app storage like the iOS bridge, using `MediaStore.setRequireOriginal` (with
-  `ACCESS_MEDIA_LOCATION`) so GPS EXIF is kept, and inserts incoming files
-  with `IS_PENDING`.
+* **Staging mode** (only `READ_MEDIA_IMAGES/VIDEO`): mirrors the photos and
+  videos under `DCIM/` into app storage like the iOS bridge, using
+  `MediaStore.setRequireOriginal` (with `ACCESS_MEDIA_LOCATION`) so GPS EXIF
+  is kept, and inserts incoming files with `IS_PENDING`. Same crash safety
+  and catch-up as iOS. All bridge work runs on one executor thread.
+* **Mode choice:** asked once on first launch and then fixed, since moving
+  the folder between `DCIM/Camera` and the staging copy would re-upload
+  everything.
 * **Background:** `WorkManager` periodic work every 15 minutes or more, with
   Wi-Fi/charging constraints, calling `RunBackgroundSync(8 min)`. There is an
   optional `dataSync` foreground service for continuous sync (Android 14+

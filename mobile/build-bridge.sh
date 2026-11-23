@@ -12,17 +12,19 @@ target="${1:-}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
-if ! command -v gomobile >/dev/null; then
-    go install golang.org/x/mobile/cmd/gomobile@latest golang.org/x/mobile/cmd/gobind@latest
-    export PATH="$(go env GOPATH)/bin:$PATH"
-fi
+# Pinned so builds are reproducible and a new upstream commit can't change
+# the app unnoticed. Bump deliberately.
+XMOBILE_VERSION=v0.0.0-20261117202452-47699113848a
+
+go install "golang.org/x/mobile/cmd/gomobile@$XMOBILE_VERSION" "golang.org/x/mobile/cmd/gobind@$XMOBILE_VERSION"
+export PATH="$(go env GOPATH)/bin:$PATH"
 gomobile init
 
 # gomobile needs golang.org/x/mobile/bind in the module graph. Add it for
 # the build only and restore go.mod/go.sum afterwards.
 cp go.mod go.mod.bak; cp go.sum go.sum.bak
 trap 'mv go.mod.bak go.mod; mv go.sum.bak go.sum' EXIT
-go get golang.org/x/mobile/bind@latest
+go get "golang.org/x/mobile/bind@$XMOBILE_VERSION"
 
 # Embed the dashboard (gui/) into the binary.
 go run build.go assets

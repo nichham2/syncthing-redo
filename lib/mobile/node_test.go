@@ -120,7 +120,7 @@ func startTestNode(t *testing.T) *Node {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := n.Acquire(); err != nil {
+	if err := n.Hold(); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(n.Stop)
@@ -177,12 +177,12 @@ func TestNodeRESTNeedsAPIKey(t *testing.T) {
 	}
 }
 
-func TestNodeAcquireRelease(t *testing.T) {
+func TestNodeHoldUnhold(t *testing.T) {
 	n := startTestNode(t) // holds once
-	if err := n.Acquire(); err != nil {
+	if err := n.Hold(); err != nil {
 		t.Fatal(err)
 	}
-	n.Release()
+	n.Unhold()
 	if !n.IsRunning() {
 		t.Fatal("stopped while another holder remains")
 	}
@@ -192,9 +192,9 @@ func TestNodeAcquireRelease(t *testing.T) {
 	if !n.IsRunning() {
 		t.Fatal("background sync stopped a node the app holds")
 	}
-	n.Release()
+	n.Unhold()
 	if n.IsRunning() {
-		t.Fatal("still running after the last Release")
+		t.Fatal("still running after the last Unhold")
 	}
 	if _, err := n.config(); err == nil {
 		t.Error("config available after Stop")
