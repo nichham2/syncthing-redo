@@ -33,6 +33,7 @@ package model
 import (
 	"context"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/syncthing/syncthing/internal/db"
@@ -184,15 +185,38 @@ func (f *folder) presentOnOtherDevice(name string) (bool, error) {
 // IgnoredDeletions lists the folder's deletion ledger, together with the
 // devices that currently hold the global version of each item.
 func (f *folder) IgnoredDeletions() ([]IgnoredDeletion, error) {
+	items, _, err := f.IgnoredDeletionsPage("", 1, 0)
+	return items, err
+}
+
+// IgnoredDeletionsPage returns one page of the ledger, sorted by name, and
+// the number of entries that match filter (a case-insensitive substring of
+// the name; "" matches everything). A perpage of zero or less returns every
+// match. Availability is only looked up for the entries on the page, so a
+// large ledger costs no more than the page that is shown.
+func (f *folder) IgnoredDeletionsPage(filter string, page, perpage int) ([]IgnoredDeletion, int, error) {
 	items, err := f.ledger.All()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	if filter != "" {
+		needle := strings.ToLower(filter)
+		items = slices.DeleteFunc(items, func(it db.IgnoredDeletion) bool {
+			return !strings.Contains(strings.ToLower(osutil.NativeFilename(it.Name)), needle)
+		})
+	}
+	total := len(items)
+	if perpage > 0 {
+		page = max(page, 1)
+		start := min((page-1)*perpage, total)
+		end := min(start+perpage, total)
+		items = items[start:end]
 	}
 	res := make([]IgnoredDeletion, 0, len(items))
 	for _, it := range items {
 		avail, err := f.db.GetGlobalAvailability(f.folderID, it.Name)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if avail == nil {
 			avail = []protocol.DeviceID{}
@@ -207,7 +231,7 @@ func (f *folder) IgnoredDeletions() ([]IgnoredDeletion, error) {
 			RawType:     it.Type,
 		})
 	}
-	return res, nil
+	return res, total, nil
 }
 
 // IgnoredDeletionsCount returns the number of entries in the ledger.
@@ -337,6 +361,14 @@ func (m *model) IgnoredDeletions(folder string) ([]IgnoredDeletion, error) {
 		return nil, err
 	}
 	return runner.IgnoredDeletions()
+}
+
+func (m *model) IgnoredDeletionsPage(folder, filter string, page, perpage int) ([]IgnoredDeletion, int, error) {
+	runner, err := m.folderRunner(folder)
+	if err != nil {
+		return nil, 0, err
+	}
+	return runner.IgnoredDeletionsPage(filter, page, perpage)
 }
 
 func (m *model) IgnoredDeletionsCount(folder string) (int, error) {

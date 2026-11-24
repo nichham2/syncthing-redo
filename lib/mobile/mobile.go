@@ -26,8 +26,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -299,6 +302,9 @@ func (n *Node) EnsurePhotoFolder(folderID, label, path string) error {
 		}
 		if !ok {
 			fcfg.NonDestructiveDeletes = true
+			// A Live Photo's still (IMG_0001.HEIC) arrives right before
+			// its video (IMG_0001.MOV), so the pair is imported together.
+			fcfg.Order = config.PullOrderAlphabetic
 		}
 		fcfg.Label = label
 		fcfg.Path = path
@@ -391,18 +397,85 @@ func (n *Node) AddPeer(deviceID, name string) error {
 }
 
 // Rescan asks Syncthing to look at a path (relative to the folder root,
-// "" for everything) now. The native side calls it after exporting new
-// photos from, or removing deleted photos out of, the photo library.
+// "" for everything) now. Prefer RescanPaths when there is more than one.
 func (n *Node) Rescan(folderID, relPath string) error {
+	return n.RescanPaths(folderID, relPath)
+}
+
+// rescanBatch is how many paths go into one scan request. Above
+// rescanWholeFolder paths, one scan of the whole folder is cheaper: the
+// scanner skips unchanged files by size and modification time.
+const (
+	rescanBatch       = 100
+	rescanWholeFolder = 1000
+)
+
+// RescanPaths asks Syncthing to look at several paths, given as one
+// newline-separated string (gomobile cannot pass a list), in as few scans
+// as possible. The native bridges call it once per batch of exported or
+// removed photos instead of once per photo. An empty list does nothing;
+// an empty line scans the whole folder.
+func (n *Node) RescanPaths(folderID, relPaths string) error {
 	api, err := n.client()
 	if err != nil {
 		return err
 	}
-	q := map[string]string{"folder": folderID}
-	if relPath != "" {
-		q["sub"] = relPath
+	return rescanPaths(context.Background(), api, folderID, splitPaths(relPaths))
+}
+
+// splitPaths turns the newline-separated list into unique paths, keeping
+// "" (the whole folder) if it was asked for.
+func splitPaths(relPaths string) []string {
+	if relPaths == "" {
+		return []string{""}
 	}
-	return api.post(context.Background(), "/rest/db/scan", q, nil, nil)
+	seen := make(map[string]struct{})
+	var res []string
+	for _, p := range strings.Split(relPaths, "\n") {
+		p = strings.TrimSpace(p)
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		res = append(res, p)
+	}
+	return res
+}
+
+func rescanPaths(ctx context.Context, api *apiClient, folderID string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	if len(paths) > rescanWholeFolder || slices.Contains(paths, "") {
+		return api.post(ctx, "/rest/db/scan", map[string]string{"folder": folderID}, nil, nil)
+	}
+	for batch := range slices.Chunk(paths, rescanBatch) {
+		q := url.Values{"folder": {folderID}, "sub": batch}
+		if err := api.doValues(ctx, http.MethodPost, "/rest/db/scan", q, nil, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GlobalFileExists reports whether another device has relPath in the
+// folder (and has not deleted it). The iOS bridge uses it to wait for a
+// Live Photo's video before importing the photo half on its own.
+func (n *Node) GlobalFileExists(folderID, relPath string) bool {
+	api, err := n.client()
+	if err != nil {
+		return false
+	}
+	var res struct {
+		Global struct {
+			Name    string `json:"name"`
+			Deleted bool   `json:"deleted"`
+		} `json:"global"`
+	}
+	if err := api.get(context.Background(), "/rest/db/file", map[string]string{"folder": folderID, "file": relPath}, &res); err != nil {
+		return false
+	}
+	return res.Global.Name != "" && !res.Global.Deleted
 }
 
 // SetPaused pauses or resumes all device connections, e.g. when the user

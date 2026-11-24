@@ -314,6 +314,24 @@ type Model struct {
 		result1 int
 		result2 error
 	}
+	IgnoredDeletionsPageStub        func(string, string, int, int) ([]model.IgnoredDeletion, int, error)
+	ignoredDeletionsPageMutex       sync.RWMutex
+	ignoredDeletionsPageArgsForCall []struct {
+		arg1 string
+		arg2 string
+		arg3 int
+		arg4 int
+	}
+	ignoredDeletionsPageReturns struct {
+		result1 []model.IgnoredDeletion
+		result2 int
+		result3 error
+	}
+	ignoredDeletionsPageReturnsOnCall map[int]struct {
+		result1 []model.IgnoredDeletion
+		result2 int
+		result3 error
+	}
 	IndexStub        func(protocol.Connection, *protocol.Index) error
 	indexMutex       sync.RWMutex
 	indexArgsForCall []struct {
@@ -2174,6 +2192,76 @@ func (fake *Model) IgnoredDeletionsCountReturnsOnCall(i int, result1 int, result
 		result1 int
 		result2 error
 	}{result1, result2}
+}
+
+func (fake *Model) IgnoredDeletionsPage(arg1 string, arg2 string, arg3 int, arg4 int) ([]model.IgnoredDeletion, int, error) {
+	fake.ignoredDeletionsPageMutex.Lock()
+	ret, specificReturn := fake.ignoredDeletionsPageReturnsOnCall[len(fake.ignoredDeletionsPageArgsForCall)]
+	fake.ignoredDeletionsPageArgsForCall = append(fake.ignoredDeletionsPageArgsForCall, struct {
+		arg1 string
+		arg2 string
+		arg3 int
+		arg4 int
+	}{arg1, arg2, arg3, arg4})
+	stub := fake.IgnoredDeletionsPageStub
+	fakeReturns := fake.ignoredDeletionsPageReturns
+	fake.recordInvocation("IgnoredDeletionsPage", []interface{}{arg1, arg2, arg3, arg4})
+	fake.ignoredDeletionsPageMutex.Unlock()
+	if stub != nil {
+		return stub(arg1, arg2, arg3, arg4)
+	}
+	if specificReturn {
+		return ret.result1, ret.result2, ret.result3
+	}
+	return fakeReturns.result1, fakeReturns.result2, fakeReturns.result3
+}
+
+func (fake *Model) IgnoredDeletionsPageCallCount() int {
+	fake.ignoredDeletionsPageMutex.RLock()
+	defer fake.ignoredDeletionsPageMutex.RUnlock()
+	return len(fake.ignoredDeletionsPageArgsForCall)
+}
+
+func (fake *Model) IgnoredDeletionsPageCalls(stub func(string, string, int, int) ([]model.IgnoredDeletion, int, error)) {
+	fake.ignoredDeletionsPageMutex.Lock()
+	defer fake.ignoredDeletionsPageMutex.Unlock()
+	fake.IgnoredDeletionsPageStub = stub
+}
+
+func (fake *Model) IgnoredDeletionsPageArgsForCall(i int) (string, string, int, int) {
+	fake.ignoredDeletionsPageMutex.RLock()
+	defer fake.ignoredDeletionsPageMutex.RUnlock()
+	argsForCall := fake.ignoredDeletionsPageArgsForCall[i]
+	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
+}
+
+func (fake *Model) IgnoredDeletionsPageReturns(result1 []model.IgnoredDeletion, result2 int, result3 error) {
+	fake.ignoredDeletionsPageMutex.Lock()
+	defer fake.ignoredDeletionsPageMutex.Unlock()
+	fake.IgnoredDeletionsPageStub = nil
+	fake.ignoredDeletionsPageReturns = struct {
+		result1 []model.IgnoredDeletion
+		result2 int
+		result3 error
+	}{result1, result2, result3}
+}
+
+func (fake *Model) IgnoredDeletionsPageReturnsOnCall(i int, result1 []model.IgnoredDeletion, result2 int, result3 error) {
+	fake.ignoredDeletionsPageMutex.Lock()
+	defer fake.ignoredDeletionsPageMutex.Unlock()
+	fake.IgnoredDeletionsPageStub = nil
+	if fake.ignoredDeletionsPageReturnsOnCall == nil {
+		fake.ignoredDeletionsPageReturnsOnCall = make(map[int]struct {
+			result1 []model.IgnoredDeletion
+			result2 int
+			result3 error
+		})
+	}
+	fake.ignoredDeletionsPageReturnsOnCall[i] = struct {
+		result1 []model.IgnoredDeletion
+		result2 int
+		result3 error
+	}{result1, result2, result3}
 }
 
 func (fake *Model) Index(arg1 protocol.Connection, arg2 *protocol.Index) error {

@@ -23,9 +23,9 @@ func TestIgnoredDeletionsEndpoints(t *testing.T) {
 	t.Parallel()
 
 	m := new(modelmocks.Model)
-	m.IgnoredDeletionsReturns([]model.IgnoredDeletion{
+	m.IgnoredDeletionsPageReturns([]model.IgnoredDeletion{
 		{Name: "DCIM/IMG_0001.HEIC", Type: "file", Size: 1234, AvailableOn: []protocol.DeviceID{{1}}},
-	}, nil)
+	}, 1, nil)
 	svc := &service{model: m}
 
 	// List
@@ -47,8 +47,24 @@ func TestIgnoredDeletionsEndpoints(t *testing.T) {
 	if res.Folder != "photos" || len(res.Items) != 1 || res.Items[0].Name != "DCIM/IMG_0001.HEIC" || res.Items[0].Size != 1234 {
 		t.Error("unexpected response", rec.Body.String())
 	}
-	if got := m.IgnoredDeletionsArgsForCall(0); got != "photos" {
-		t.Error("wrong folder", got)
+	if folder, filter, page, perpage := m.IgnoredDeletionsPageArgsForCall(0); folder != "photos" || filter != "" || page != 1 || perpage != 0 {
+		t.Error("unexpected unpaged call", folder, filter, page, perpage)
+	}
+
+	// Paged and filtered
+	rec = httptest.NewRecorder()
+	svc.getFolderIgnoredDeletions(rec, httptest.NewRequest(http.MethodGet, "/rest/folder/ignoreddeletions?folder=photos&filter=img&page=3&perpage=50", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatal(rec.Code, rec.Body.String())
+	}
+	if folder, filter, page, perpage := m.IgnoredDeletionsPageArgsForCall(1); folder != "photos" || filter != "img" || page != 3 || perpage != 50 {
+		t.Error("unexpected paged call", folder, filter, page, perpage)
+	}
+	var paged struct {
+		Total int `json:"total"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &paged); err != nil || paged.Total != 1 {
+		t.Error("missing total", rec.Body.String())
 	}
 
 	// Restore

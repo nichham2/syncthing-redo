@@ -105,7 +105,11 @@ ledger entries keep their protection until they are restored or deleted
 everywhere.
 
 `GET /rest/folder/ignoreddeletions?folder=ID` lists the ledger with, for each
-item, the devices that still hold it (`availableOn`).
+item, the devices that still hold it (`availableOn`). With `page` and
+`perpage` it returns one page (sorted by name) plus `total`, and `filter`
+narrows it to names containing a text; availability is only looked up for
+the items on the page. `countonly=true` returns just the ledger size. The
+dashboard loads 100 items at a time and searches on the engine.
 
 ### Why this design
 
@@ -133,7 +137,8 @@ A small gomobile-compatible package that embeds the full Syncthing core:
 | `NewNode(homeDir)`, `Start()`, `Stop()` | app lifecycle; `Stop` closes the DB before suspension |
 | `EnsurePhotoFolder(id, label, path)` | send-receive folder, `nonDestructiveDeletes`, permissions ignored |
 | `AddPeer(deviceID, name)` | pairing; shares every photo folder |
-| `Rescan(folder, relPath)` | the native side signals photo library changes |
+| `RescanPaths(folder, relPaths)` | the native side signals photo library changes, newline-separated, once per pass or per 100 files (`Rescan` for one path) |
+| `GlobalFileExists(folder, relPath)` | iOS waits for a Live Photo's video before importing its photo |
 | `RunBackgroundSync(maxSeconds)` | one bounded OS background window; returns status JSON |
 | `StatusJSON()`, `SetPaused(bool)`, `DeviceID()`, `DashboardURL()` | UI and notifications |
 | `Platform` callback interface | `OnRemoteChange` (import into the photo library), `OnStateChanged` |
@@ -160,22 +165,39 @@ folder** in the app container plus a `localIdentifier ↔ path` mapping.
 
 * **Export:** new assets are written with
   `PHAssetResourceManager.writeData` from the *original* resource (full
-  quality, EXIF/GPS, HEIC, iCloud originals downloaded on demand). The file
-  modification time is set to the capture date.
+  quality, EXIF/GPS, HEIC, iCloud originals downloaded on demand), or from
+  the edited render (`.fullSizePhoto`/`.fullSizeVideo`) if the photo was
+  edited. The file modification time is set to the capture date (the edit
+  date for edited photos). A Live Photo's video (`.pairedVideo`) is written
+  next to it with the same base name: `IMG_0001.HEIC` + `IMG_0001.MOV`.
+* **Edits in Photos:** the mapping keeps each asset's modification date and
+  a hash of its last synced render. When the date moves and the render
+  changed, the new render replaces the staging file under the same name
+  (converted with ImageIO if it came out in another format), so other
+  devices receive it as an update.
+* **Edits from other devices:** the mapping keeps each file's size and
+  mtime as last written or imported. A changed file is applied to its asset
+  as a `PHContentEditingOutput` (as JPEG), so the original stays revertible
+  in Photos, and its render hash is recorded so the edit is not sent back.
+  A changed Live Photo video is kept but not applied (Photos can't take a
+  new motion part without the user).
 * **Import:** files arriving from Android are added with
   `PHAssetCreationRequest.addResource(with:fileURL:)` (original bytes, not
   re-encoded); `creationDate` comes from EXIF `DateTimeOriginal` or the
-  preserved mtime. The mapping prevents re-exporting them. Every reconcile
-  also imports staging files that are in neither direction of the mapping,
-  so a missed notification is caught up.
+  preserved mtime. The mapping prevents re-exporting them. A HEIC/JPEG and a
+  `.MOV` with the same base name are imported together as one Live Photo
+  (as two items if Photos rejects the pair); a photo whose video is still
+  on its way waits for it, for up to 10 minutes. The photo folder pulls in
+  alphabetical order, so the video arrives right after its photo. Every
+  reconcile also imports staging files that are in neither direction of the
+  mapping and applies changed ones, so a missed notification is caught up.
 * **Crash safety:** exports are written to a `.keepsake-*.tmp` file (in the
   folder's ignore patterns) and moved into place; the mapping is saved after
   every change; a leftover file with the same bytes is adopted rather than
   exported again as `name (1).ext`.
 * **Limited access:** deletions are only inferred with full Photos access;
   under limited access new selected photos are exported, nothing is removed.
-  iCloud Shared Albums are not exported. A Live Photo's paired video and
-  edits are not synced yet.
+  iCloud Shared Albums are not exported.
 * **Deletion in Photos:** detected by diffing the mapping against the
   library; the staging file is removed and Syncthing records a local-only
   deletion. "Delete everywhere" from the other phone deletes the asset,
@@ -199,14 +221,24 @@ by PhotoKit, which Syncthing's filesystem abstraction allows.
 
 * **Direct mode** (recommended, needs *All files access*, which Google Play
   allows for sync apps): Syncthing syncs `DCIM/Camera` in place. Files keep
-  their original bytes and mtimes. New files are announced to the gallery
-  with `MediaScannerConnection.scanFile`. Deleting in the gallery removes the
+  their original bytes and mtimes. New and changed files (edits from other
+  devices) are announced to the gallery with
+  `MediaScannerConnection.scanFile`; an edit saved in the gallery changes
+  the file, which Syncthing sends as an update. A Live Photo from an iPhone
+  shows up as a photo plus a short clip. Deleting in the gallery removes the
   file, and Syncthing records it as a local-only deletion.
 * **Staging mode** (only `READ_MEDIA_IMAGES/VIDEO`): mirrors the photos and
   videos under `DCIM/` into app storage like the iOS bridge, using
   `MediaStore.setRequireOriginal` (with `ACCESS_MEDIA_LOCATION`) so GPS EXIF
   is kept, and inserts incoming files with `IS_PENDING`. Same crash safety
-  and catch-up as iOS. All bridge work runs on one executor thread.
+  and catch-up as iOS. An item whose `DATE_MODIFIED`/`SIZE` changed is
+  copied over its staging file if the bytes differ (a gallery edit). A
+  staging file changed by another device is written into its gallery item;
+  items another app owns need the user's consent
+  (`MediaStore.createWriteRequest`, asked by the dashboard), like
+  deletions. A Live Photo's `.MOV` stays in the staging folder with its
+  photo instead of becoming a separate clip, and is removed with it. All
+  bridge work runs on one executor thread.
 * **Mode choice:** asked once on first launch and then fixed, since moving
   the folder between `DCIM/Camera` and the staging copy would re-upload
   everything.

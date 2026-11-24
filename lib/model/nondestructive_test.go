@@ -383,3 +383,35 @@ func TestNonDestructiveDeleteLedgerPrunedOnRemoteDelete(t *testing.T) {
 		return equalContents(tfs, name, []byte("a different, newer photo")) == nil
 	})
 }
+
+func TestNonDestructiveDeleteListPaged(t *testing.T) {
+	m, fc, tfs, _ := setupNonDestructive(t)
+
+	names := []string{"IMG_0010.jpg", "IMG_0011.jpg", "VID_0012.mp4"}
+	for _, name := range names {
+		syncFromRemote(t, m, fc, tfs, name, []byte("paged "+name))
+		must(t, tfs.Remove(name))
+	}
+	must(t, m.ScanFolder("default"))
+
+	items, total, err := m.IgnoredDeletionsPage("default", "", 2, 2)
+	must(t, err)
+	if total != 3 || len(items) != 1 || items[0].Name != "VID_0012.mp4" {
+		t.Error("unexpected second page", total, items)
+	}
+	if len(items) == 1 && len(items[0].AvailableOn) != 1 {
+		t.Error("availability missing on a paged item", items[0].AvailableOn)
+	}
+
+	items, total, err = m.IgnoredDeletionsPage("default", "img_", 1, 10)
+	must(t, err)
+	if total != 2 || len(items) != 2 || items[0].Name != "IMG_0010.jpg" {
+		t.Error("unexpected filtered page", total, items)
+	}
+
+	items, total, err = m.IgnoredDeletionsPage("default", "", 5, 2)
+	must(t, err)
+	if total != 3 || len(items) != 0 {
+		t.Error("a page past the end should be empty", total, items)
+	}
+}

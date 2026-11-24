@@ -17,7 +17,7 @@ import (
 
 // Endpoints for the non-destructive deletion ledger ("ignored files").
 //
-//	GET  /rest/folder/ignoreddeletions?folder=ID [&countonly=true]
+//	GET  /rest/folder/ignoreddeletions?folder=ID [&countonly=true] [&filter=TEXT] [&page=N&perpage=N]
 //	POST /rest/folder/ignoreddeletions/restore?folder=ID    {"names": [...]}
 //	POST /rest/folder/ignoreddeletions/propagate?folder=ID  {"names": [...]}
 
@@ -26,8 +26,9 @@ type ignoredDeletionsRequest struct {
 }
 
 func (s *service) getFolderIgnoredDeletions(w http.ResponseWriter, r *http.Request) {
-	folder := r.URL.Query().Get("folder")
-	if r.URL.Query().Get("countonly") == "true" {
+	qs := r.URL.Query()
+	folder := qs.Get("folder")
+	if qs.Get("countonly") == "true" {
 		// Cheap: no per-item availability lookups. Used by the mobile
 		// bridge's status, which is polled often.
 		n, err := s.model.IgnoredDeletionsCount(folder)
@@ -38,7 +39,13 @@ func (s *service) getFolderIgnoredDeletions(w http.ResponseWriter, r *http.Reque
 		sendJSON(w, map[string]any{"folder": folder, "count": n})
 		return
 	}
-	items, err := s.model.IgnoredDeletions(folder)
+	// Paged when page or perpage is given (the dashboard asks for one
+	// screenful at a time); the whole list otherwise, for older clients.
+	page, perpage := 1, 0
+	if qs.Has("page") || qs.Has("perpage") {
+		page, perpage = getPagingParams(qs)
+	}
+	items, total, err := s.model.IgnoredDeletionsPage(folder, qs.Get("filter"), page, perpage)
 	if err != nil {
 		http.Error(w, err.Error(), ignoredDeletionsErrorStatus(err))
 		return
@@ -47,8 +54,11 @@ func (s *service) getFolderIgnoredDeletions(w http.ResponseWriter, r *http.Reque
 		items = []model.IgnoredDeletion{}
 	}
 	sendJSON(w, map[string]any{
-		"folder": folder,
-		"items":  items,
+		"folder":  folder,
+		"items":   items,
+		"total":   total,
+		"page":    page,
+		"perpage": perpage,
 	})
 }
 

@@ -96,11 +96,17 @@ object SyncthingNode : mobile.Platform {
     }
 
     /** Mirrors the photo library into the folder (staging mode) and imports
-     *  anything received but not yet in the gallery. Rescan failures are
-     *  not fatal: the file watcher and the next full scan pick changes up. */
+     *  anything received but not yet in the gallery. Rescans go to the
+     *  engine in batches. Rescan failures are not fatal: the file watcher and the next full scan pick changes up. */
     fun reconcile() {
         val n = node ?: return
-        media.reconcile { rel -> runCatching { n.rescan(PHOTO_FOLDER_ID, rel) } }
+        media.reconcile { rels -> runCatching { n.rescanPaths(PHOTO_FOLDER_ID, rels.joinToString("\n")) } }
+    }
+
+    /** Writes edits from other devices that the user just allowed. */
+    fun applyPendingEdits(ids: Collection<Long>) {
+        if (node == null) return
+        media.applyPendingEdits(ids)
     }
 
     val dashboardUrl: String? get() = node?.dashboardURL()?.takeIf { it.isNotEmpty() }
