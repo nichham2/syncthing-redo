@@ -431,7 +431,7 @@ func splitPaths(relPaths string) []string {
 	}
 	seen := make(map[string]struct{})
 	var res []string
-	for _, p := range strings.Split(relPaths, "\n") {
+	for p := range strings.SplitSeq(relPaths, "\n") {
 		p = strings.TrimSpace(p)
 		if _, ok := seen[p]; ok {
 			continue
