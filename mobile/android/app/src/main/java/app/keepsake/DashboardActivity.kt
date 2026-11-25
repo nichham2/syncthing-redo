@@ -37,6 +37,7 @@ class DashboardActivity : ComponentActivity() {
     private var askedPermissions = false
     private var askedAllFiles = false
     private var pendingDeleteIds: List<Long> = emptyList()
+    private var pendingEditIds: List<Long> = emptyList()
 
     private val askPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         startNode()
@@ -47,6 +48,17 @@ class DashboardActivity : ComponentActivity() {
         // no, the photos stay here (and stay deleted on the other devices).
         PendingDeletes.remove(this, pendingDeleteIds)
         pendingDeleteIds = emptyList()
+    }
+
+    private val askWrite = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        // Answered either way: don't ask again for these. If the user said
+        // no, the photos here keep their old version.
+        val ids = pendingEditIds
+        PendingEdits.remove(this, ids)
+        pendingEditIds = emptyList()
+        if (result.resultCode == RESULT_OK) {
+            SyncthingNode.bridgeExecutor.execute { runCatching { SyncthingNode.applyPendingEdits(ids) } }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,6 +84,7 @@ class DashboardActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         askDeleteConsent()
+        askWriteConsent()
     }
 
     override fun onStop() {
@@ -163,6 +176,22 @@ class DashboardActivity : ComponentActivity() {
             // An item is already gone: nothing left to ask about.
             PendingDeletes.remove(this, ids)
             pendingDeleteIds = emptyList()
+        }
+    }
+
+    /** Edits made on another device to photos another app (the camera)
+     *  owns: Android 11+ only lets us write them with the user's consent. */
+    private fun askWriteConsent() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || pendingEditIds.isNotEmpty() || pendingDeleteIds.isNotEmpty()) return
+        val ids = PendingEdits.peek(this)
+        if (ids.isEmpty()) return
+        val uris = ids.map { ContentUris.withAppendedId(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL), it) }
+        pendingEditIds = ids
+        runCatching {
+            askWrite.launch(IntentSenderRequest.Builder(MediaStore.createWriteRequest(contentResolver, uris)).build())
+        }.onFailure {
+            PendingEdits.remove(this, ids)
+            pendingEditIds = emptyList()
         }
     }
 

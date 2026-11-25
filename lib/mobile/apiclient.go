@@ -42,13 +42,19 @@ func newAPIClient(base, apiKey string, myID protocol.DeviceID) *apiClient {
 }
 
 func (c *apiClient) do(ctx context.Context, method, path string, query map[string]string, body, out any) error {
+	q := url.Values{}
+	for k, v := range query {
+		q.Set(k, v)
+	}
+	return c.doValues(ctx, method, path, q, body, out)
+}
+
+// doValues is do with a query that can repeat a key, such as several
+// "sub" paths for one scan.
+func (c *apiClient) doValues(ctx context.Context, method, path string, query url.Values, body, out any) error {
 	u := c.base + path
 	if len(query) > 0 {
-		q := url.Values{}
-		for k, v := range query {
-			q.Set(k, v)
-		}
-		u += "?" + q.Encode()
+		u += "?" + query.Encode()
 	}
 	var rd io.Reader
 	if body != nil {

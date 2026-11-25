@@ -152,8 +152,15 @@ final class SyncthingService: NSObject, MobilePlatformProtocol {
         }
     }
 
-    func rescan(_ relPath: String) {
-        try? node?.rescan(Self.photoFolderID, relPath: relPath)
+    /// Asks the engine to scan these paths now, in as few scans as it can.
+    func rescan(_ relPaths: [String]) {
+        guard !relPaths.isEmpty else { return }
+        try? node?.rescanPaths(Self.photoFolderID, relPaths: relPaths.joined(separator: "\n"))
+    }
+
+    /// Whether another device has this file in the photo folder.
+    func globalFileExists(_ relPath: String) -> Bool {
+        node?.globalFileExists(Self.photoFolderID, relPath: relPath) ?? false
     }
 
     // MARK: MobilePlatformProtocol (called on a Go goroutine)

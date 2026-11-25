@@ -262,7 +262,7 @@ func (s *service) Serve(ctx context.Context) error {
 	restMux.HandlerFunc(http.MethodGet, "/rest/db/browse", s.getDBBrowse)                             // folder [prefix] [dirsonly] [levels]
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/versions", s.getFolderVersions)                 // folder
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/errors", s.getFolderErrors)                     // folder [perpage] [page]
-	restMux.HandlerFunc(http.MethodGet, "/rest/folder/ignoreddeletions", s.getFolderIgnoredDeletions) // folder
+	restMux.HandlerFunc(http.MethodGet, "/rest/folder/ignoreddeletions", s.getFolderIgnoredDeletions) // folder [countonly] [filter] [perpage] [page]
 	restMux.HandlerFunc(http.MethodGet, "/rest/folder/pullerrors", s.getFolderErrors)                 // folder (deprecated)
 	restMux.HandlerFunc(http.MethodGet, "/rest/events", s.getIndexEvents)                             // [since] [limit] [timeout] [events]
 	restMux.HandlerFunc(http.MethodGet, "/rest/events/disk", s.getDiskEvents)                         // [since] [limit] [timeout]

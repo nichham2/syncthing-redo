@@ -66,6 +66,7 @@ type service interface {
 	GetStatistics() (stats.FolderStatistics, error)
 
 	IgnoredDeletions() ([]IgnoredDeletion, error)
+	IgnoredDeletionsPage(filter string, page, perpage int) ([]IgnoredDeletion, int, error)
 	IgnoredDeletionsCount() (int, error)
 	RestoreIgnoredDeletions(names []string) error
 	PropagateIgnoredDeletions(names []string) error
@@ -102,6 +103,9 @@ type Model interface {
 	RestoreFolderVersions(folder string, versions map[string]time.Time) (map[string]error, error)
 
 	IgnoredDeletions(folder string) ([]IgnoredDeletion, error)
+	// IgnoredDeletionsPage returns one page of the ledger whose names
+	// contain filter (case-insensitive), plus the number of matches.
+	IgnoredDeletionsPage(folder, filter string, page, perpage int) ([]IgnoredDeletion, int, error)
 	// IgnoredDeletionsCount is the size of the folder's deletion ledger,
 	// without the per-item lookups IgnoredDeletions does.
 	IgnoredDeletionsCount(folder string) (int, error)

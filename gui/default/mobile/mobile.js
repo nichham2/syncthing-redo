@@ -119,7 +119,11 @@
         folderStats: {},
         deviceStats: {},
         completion: {},      // deviceID -> folderID -> pct
-        ignored: {},         // folderID -> [items]
+        ignored: {},         // folderID -> [items] loaded so far (current search)
+        ignoredMatches: {},  // folderID -> number of items matching the search
+        ignoredCount: {},    // folderID -> ledger size, for the overview and badge
+        ignoredLoaded: 0,    // pages of the current list loaded so far
+        ignoredQuery: '',    // search the current list was loaded with
         selected: new Set(), // names in the current ignored folder
         view: 'sync',
         ignoredFolder: null,
@@ -164,11 +168,13 @@
                 }
                 jobs.push(get('db/status', { folder: f.id }).then(function (s) { state.folderStatus[f.id] = s; }));
                 if (f.nonDestructiveDeletes) {
-                    jobs.push(get('folder/ignoreddeletions', { folder: f.id }).then(function (r) {
-                        state.ignored[f.id] = r.items || [];
+                    jobs.push(get('folder/ignoreddeletions', { folder: f.id, countonly: 'true' }).then(function (r) {
+                        state.ignoredCount[f.id] = r.count || 0;
                     }));
                 } else {
                     state.ignored[f.id] = [];
+                    state.ignoredMatches[f.id] = 0;
+                    state.ignoredCount[f.id] = 0;
                 }
                 peers().forEach(function (d) {
                     var c = state.connections[d.deviceID];
@@ -178,11 +184,73 @@
                     }));
                 });
             });
+            pickIgnoredFolder();
+            if (state.ignoredFolder) jobs.push(loadIgnored(false));
             return Promise.all(jobs.map(function (j) { return j.catch(function () { }); }));
         }).then(render).catch(function (err) {
             setPill('Offline', 'is-warn');
             $('hero-status').textContent = 'Can’t reach the sync service';
             $('hero-detail').textContent = err.message;
+        });
+    }
+
+    // The ignored list is loaded a page at a time, and searched on the
+    // engine, so a ledger of thousands of photos stays quick to show.
+    var IGNORED_PAGE = 100;
+
+    function pickIgnoredFolder() {
+        var nd = ndFolders();
+        if (!state.ignoredFolder || !nd.some(function (f) { return f.id === state.ignoredFolder; })) {
+            state.ignoredFolder = nd.length ? nd[0].id : null;
+            state.selected.clear();
+            state.ignoredLoaded = 0;
+        }
+    }
+
+    // more: fetch the next page and append it. Otherwise reload everything
+    // loaded so far (at least the first page), e.g. after a change.
+    function loadIgnored(more) {
+        var folder = state.ignoredFolder;
+        if (!folder) return Promise.resolve();
+        var query = $('ignored-search').value.trim();
+        if (query !== state.ignoredQuery) {
+            state.ignoredQuery = query;
+            state.ignoredLoaded = 0;
+            more = false;
+        }
+        var params = { folder: folder, filter: query };
+        var loaded = (state.ignored[folder] || []).length;
+        if (more && loaded % IGNORED_PAGE !== 0) {
+            // Items were restored or deleted since: pages have shifted, so
+            // reload what is shown plus one more page.
+            more = false;
+            state.ignoredLoaded += 1;
+        }
+        if (more) {
+            params.page = state.ignoredLoaded + 1;
+            params.perpage = IGNORED_PAGE;
+        } else {
+            params.page = 1;
+            params.perpage = Math.max(1, state.ignoredLoaded) * IGNORED_PAGE;
+        }
+        return get('folder/ignoreddeletions', params).then(function (r) {
+            if (folder !== state.ignoredFolder || query !== state.ignoredQuery) return; // stale answer
+            var items = r.items || [];
+            state.ignored[folder] = more ? (state.ignored[folder] || []).concat(items) : items;
+            state.ignoredMatches[folder] = r.total || 0;
+            state.ignoredLoaded = Math.ceil(state.ignored[folder].length / IGNORED_PAGE);
+        });
+    }
+
+    // Loads every match, for "Select all" across pages.
+    function loadAllIgnored() {
+        var folder = state.ignoredFolder;
+        var query = state.ignoredQuery;
+        return get('folder/ignoreddeletions', { folder: folder, filter: query }).then(function (r) {
+            if (folder !== state.ignoredFolder || query !== state.ignoredQuery) return;
+            state.ignored[folder] = r.items || [];
+            state.ignoredMatches[folder] = state.ignored[folder].length;
+            state.ignoredLoaded = Math.ceil(state.ignored[folder].length / IGNORED_PAGE);
         });
     }
 
@@ -283,7 +351,7 @@
         });
         $('stat-last').textContent = ago(last);
         $('stat-local').textContent = local.toLocaleString();
-        var ignoredTotal = Object.keys(state.ignored).reduce(function (n, k) { return n + state.ignored[k].length; }, 0);
+        var ignoredTotal = Object.keys(state.ignoredCount).reduce(function (n, k) { return n + state.ignoredCount[k]; }, 0);
         $('stat-ignored').textContent = ignoredTotal.toLocaleString();
         var badge = $('ignored-badge');
         badge.hidden = ignoredTotal === 0;
@@ -354,19 +422,13 @@
     function renderIgnored() {
         var nd = ndFolders();
         var sel = $('ignored-folder');
-        if (!state.ignoredFolder || !nd.some(function (f) { return f.id === state.ignoredFolder; })) {
-            state.ignoredFolder = nd.length ? nd[0].id : null;
-            state.selected.clear();
-        }
+        pickIgnoredFolder();
         sel.hidden = nd.length < 2;
         sel.innerHTML = nd.map(function (f) {
             return '<option value="' + esc(f.id) + '"' + (f.id === state.ignoredFolder ? ' selected' : '') + '>' + esc(f.label || f.id) + '</option>';
         }).join('');
 
-        var q = $('ignored-search').value.trim().toLowerCase();
-        var items = (state.ignored[state.ignoredFolder] || []).filter(function (it) {
-            return !q || it.name.toLowerCase().indexOf(q) >= 0;
-        });
+        var items = state.ignored[state.ignoredFolder] || [];
         // Drop selections that no longer exist
         var names = new Set(items.map(function (it) { return it.name; }));
         state.selected.forEach(function (n) { if (!names.has(n)) state.selected.delete(n); });
@@ -391,15 +453,27 @@
                 '</label></li>';
         }).join('');
 
-        var total = (state.ignored[state.ignoredFolder] || []).length;
+        var total = state.ignoredMatches[state.ignoredFolder] || 0;
+        var allLoaded = items.length >= total;
+        var allChecked = items.length > 0 && items.every(function (it) { return state.selected.has(it.name); });
         $('ignored-empty').hidden = items.length > 0;
         $('select-all-row').hidden = items.length === 0;
-        $('ignored-count').textContent = count(total, 'item', 'items');
-        $('select-all').checked = items.length > 0 && items.every(function (it) { return state.selected.has(it.name); });
+        $('ignored-count').textContent = allLoaded
+            ? count(total, 'item', 'items')
+            : items.length.toLocaleString() + ' of ' + count(total, 'item', 'items');
+        $('select-all').checked = allChecked;
+        $('ignored-more').hidden = allLoaded;
         updateActionBar();
     }
 
     function updateActionBar() {
+        // "Select all" covers what is shown; offer the rest when more exist.
+        var items = state.ignored[state.ignoredFolder] || [];
+        var total = state.ignoredMatches[state.ignoredFolder] || 0;
+        var allChecked = items.length > 0 && items.every(function (it) { return state.selected.has(it.name); });
+        $('select-every').hidden = !allChecked || items.length >= total;
+        $('select-every').textContent = 'Select all ' + total.toLocaleString();
+
         var n = state.selected.size;
         $('action-bar').hidden = state.view !== 'ignored' || n === 0;
         $('action-count').textContent = n + ' selected';
@@ -494,9 +568,31 @@
     $('ignored-folder').addEventListener('change', function (e) {
         state.ignoredFolder = e.target.value;
         state.selected.clear();
-        renderIgnored();
+        state.ignoredLoaded = 0;
+        state.ignored[state.ignoredFolder] = [];
+        loadIgnored(false).then(renderIgnored).catch(fail);
     });
-    $('ignored-search').addEventListener('input', renderIgnored);
+
+    var searchTimer = null;
+    $('ignored-search').addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () { loadIgnored(false).then(renderIgnored).catch(fail); }, 250);
+    });
+
+    $('ignored-more').addEventListener('click', function (e) {
+        var btn = e.currentTarget;
+        btn.disabled = true;
+        loadIgnored(true).then(renderIgnored).catch(fail).then(function () { btn.disabled = false; });
+    });
+
+    $('select-every').addEventListener('click', function (e) {
+        var btn = e.currentTarget;
+        btn.disabled = true;
+        loadAllIgnored().then(function () {
+            (state.ignored[state.ignoredFolder] || []).forEach(function (it) { state.selected.add(it.name); });
+            renderIgnored();
+        }).catch(fail).then(function () { btn.disabled = false; });
+    });
 
     $('ignored-list').addEventListener('change', function (e) {
         var cb = e.target;
@@ -524,9 +620,13 @@
         post('folder/ignoreddeletions/' + action, { folder: folder }, { names: names })
             .then(function () {
                 // Optimistic update; the event stream refreshes the rest.
+                var before = (state.ignored[folder] || []).length;
                 state.ignored[folder] = (state.ignored[folder] || []).filter(function (it) {
                     return !names.some(function (n) { return it.name === n || it.name.indexOf(n + '/') === 0; });
                 });
+                var gone = before - state.ignored[folder].length;
+                state.ignoredMatches[folder] = Math.max(0, (state.ignoredMatches[folder] || 0) - gone);
+                state.ignoredCount[folder] = Math.max(0, (state.ignoredCount[folder] || 0) - gone);
                 state.selected.clear();
                 renderIgnored();
                 renderOverview();
